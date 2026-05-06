@@ -61,7 +61,7 @@ def root():
 async def get_schedule(year: int):
     """Return the full event schedule for a given season."""
     schedule = await run_blocking(fastf1.get_event_schedule, year, include_testing=False)
-    cols = ["RoundNumber", "Country", "Location", "OfficialEventName", "EventDate", "EventFormat"]
+    cols = ["RoundNumber", "Country", "Location", "EventName", "OfficialEventName", "EventDate", "EventFormat"]
     return schedule[cols].to_dict(orient="records")
 
 
@@ -124,6 +124,83 @@ async def get_lap_telemetry(
     result = telemetry[cols].copy()
     result["Time"] = result["Time"].dt.total_seconds()
     return result.to_dict(orient="records")
+
+
+# ---------------------------------------------------------------------------
+# Historical – Available sessions for a round
+# ---------------------------------------------------------------------------
+
+@app.get("/sessions/{year}/{round_number}")
+async def get_available_sessions(year: int, round_number: int):
+    """Return the ordered list of sessions for a round (e.g. Practice 1, Qualifying, Race)."""
+    def _load():
+        return fastf1.get_event(year, round_number)
+
+    try:
+        event = await run_blocking(_load)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    sessions = []
+    for i in range(1, 6):
+        name = event.get(f"Session{i}")
+        if name and str(name) not in ("", "None", "nan"):
+            sessions.append({"index": i, "name": str(name)})
+    return sessions
+
+
+# ---------------------------------------------------------------------------
+# Historical – Session results
+# ---------------------------------------------------------------------------
+
+def _td_to_laptime(td) -> str | None:
+    """Convert a pandas Timedelta to a m:ss.mmm string, or None if NaT."""
+    if pd.isna(td):
+        return None
+    total = td.total_seconds()
+    mins = int(total // 60)
+    secs = total % 60
+    return f"{mins}:{secs:06.3f}" if mins > 0 else f"{secs:.3f}"
+
+
+@app.get("/results/{year}/{round_number}/{session_name}")
+async def get_session_results(year: int, round_number: int, session_name: str):
+    """
+    Return finishing results for any session type.
+    session_name must match exactly what /sessions returns (e.g. 'Race', 'Qualifying', 'Practice 1').
+    """
+    def _load():
+        s = fastf1.get_session(year, round_number, session_name)
+        s.load(telemetry=False, weather=False, messages=False)
+        return s
+
+    try:
+        session = await run_blocking(_load)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    if session.results is None or session.results.empty:
+        return []
+
+    rows = []
+    for _, r in session.results.iterrows():
+        rows.append({
+            "position":          int(r["Position"]) if pd.notna(r.get("Position")) else None,
+            "classifiedPosition": str(r.get("ClassifiedPosition", "")),
+            "driverNumber":      str(r.get("DriverNumber", "")),
+            "abbreviation":      str(r.get("Abbreviation", "")),
+            "fullName":          str(r.get("FullName", "")),
+            "teamName":          str(r.get("TeamName", "")),
+            "teamColor":         f"#{r.get('TeamColor', 'ffffff')}",
+            "gridPosition":      int(r["GridPosition"]) if pd.notna(r.get("GridPosition")) else None,
+            "q1":    _td_to_laptime(r.get("Q1")),
+            "q2":    _td_to_laptime(r.get("Q2")),
+            "q3":    _td_to_laptime(r.get("Q3")),
+            "time":  _td_to_laptime(r.get("Time")),
+            "status": str(r.get("Status", "")),
+            "points": float(r["Points"]) if pd.notna(r.get("Points")) else 0,
+        })
+    return rows
 
 
 # ---------------------------------------------------------------------------

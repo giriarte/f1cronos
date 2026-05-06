@@ -1,3 +1,4 @@
+import { Link } from 'react-router-dom'
 import './RaceCard.css'
 
 const MONTH_SHORT = ['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec']
@@ -7,12 +8,16 @@ function formatDate(dateStr) {
   return `${d.getDate()} ${MONTH_SHORT[d.getMonth()]} ${d.getFullYear()}`
 }
 
-export default function RaceCard({ race }) {
+export default function RaceCard({ race, year }) {
   const { round, name, circuit, country, countryCode, trackMap, date, status } = race
   const label = name.replace(' Grand Prix', '')
 
   return (
-    <div className={`race-card ${status}`}>
+    <Link
+      to={`/race/${year}/${round}`}
+      state={{ race }}
+      className={`race-card ${status}`}
+    >
       {trackMap && (
         <img
           className="race-card-track"
@@ -43,6 +48,6 @@ export default function RaceCard({ race }) {
       {status === 'cancelled' && (
         <div className="race-card-badge cancelled">Cancelled</div>
       )}
-    </div>
+    </Link>
   )
 }

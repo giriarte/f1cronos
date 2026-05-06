@@ -1,3 +1,7 @@
+a.race-card {
+  text-decoration: none;
+}
+
 .race-card {
   display: flex;
   flex-direction: column;

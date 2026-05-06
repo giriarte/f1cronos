@@ -82,3 +82,13 @@
 .main-footer a:hover {
   color: var(--text-secondary);
 }
+
+.status-message {
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin: 0 0 16px;
+}
+
+.status-message.error {
+  color: var(--red);
+}
