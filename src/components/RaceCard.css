@@ -1,0 +1,99 @@
+.race-card {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px;
+  padding-right: 120px;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  background: var(--bg-card);
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s, transform 0.15s;
+  position: relative;
+  overflow: hidden;
+}
+
+.race-card:hover {
+  border-color: var(--red);
+  box-shadow: 0 4px 16px rgba(0,0,0,0.18);
+  transform: translateY(-2px);
+}
+
+.race-card.completed {
+  border-left: 3px solid var(--red);
+}
+
+.race-card-round {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  text-transform: uppercase;
+}
+
+.race-card-track {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 100px;
+  height: auto;
+  pointer-events: none;
+  opacity: 0.5;
+}
+
+.race-card-flag {
+  width: 40px;
+  height: auto;
+  border-radius: 3px;
+  display: block;
+}
+
+.race-card-body {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex: 1;
+}
+
+.race-card-name {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+  line-height: 1.2;
+}
+
+.race-card-circuit {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.race-card-date {
+  font-size: 12px;
+  color: var(--text-secondary);
+  margin-top: 4px;
+}
+
+.race-card-badge {
+  align-self: flex-start;
+  margin-top: 4px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.race-card-badge.completed {
+  background: rgba(225, 6, 0, 0.12);
+  color: var(--red);
+}
+
+.race-card-badge.upcoming {
+  background: var(--bg-hover);
+  color: var(--text-muted);
+}
+
+.race-card-badge.cancelled {
+  background: rgba(255,255,255,0.05);
+  color: var(--text-muted);
+}
