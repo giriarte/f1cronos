@@ -145,22 +145,75 @@
   font-size: 12px;
 }
 
-.col-team {
-  min-width: 160px;
+.col-team-icon {
+  width: 28px;
+  padding-left: 6px !important;
+  padding-right: 6px !important;
+  text-align: center;
 }
 
-.team-dot {
+.team-bar {
   display: inline-block;
-  width: 8px;
-  height: 8px;
-  border-radius: 50%;
-  margin-right: 8px;
+  width: 3px;
+  height: 20px;
+  border-radius: 2px;
   vertical-align: middle;
-  flex-shrink: 0;
 }
 
 .col-time {
   min-width: 100px;
+}
+
+.col-q {
+  min-width: 210px;
+  padding: 6px 10px !important;
+}
+
+.q-inner {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.q-laptime {
+  font-variant-numeric: tabular-nums;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  color: var(--text-primary);
+  min-width: 58px;
+  flex-shrink: 0;
+}
+
+.q-grid {
+  display: flex;
+  gap: 6px;
+}
+
+.q-sector-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.q-sector-time {
+  font-variant-numeric: tabular-nums;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 9px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.q-micros {
+  display: flex;
+  gap: 2px;
+}
+
+.q-micro {
+  width: 10px;
+  height: 5px;
+  border-radius: 1px;
+  opacity: 0.85;
 }
 
 .mono {

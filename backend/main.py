@@ -204,6 +204,113 @@ async def get_session_results(year: int, round_number: int, session_name: str):
 
 
 # ---------------------------------------------------------------------------
+# Historical – Qualifying sector telemetry
+# ---------------------------------------------------------------------------
+
+def _assign_sector_colors(times: dict) -> dict:
+    """Rank sector times: purple=1st, green=top 30%, yellow=mid 35%, red=bottom 35%."""
+    if not times:
+        return {}
+    ranked = sorted(times, key=times.get)
+    n = len(ranked)
+    out = {}
+    for i, abbr in enumerate(ranked):
+        if i == 0:
+            out[abbr] = "purple"
+        elif i < max(1, round(n * 0.30)):
+            out[abbr] = "green"
+        elif i < max(1, round(n * 0.65)):
+            out[abbr] = "yellow"
+        else:
+            out[abbr] = "red"
+    return out
+
+
+@app.get("/quali-sectors/{year}/{round_number}/{session_name}")
+async def get_quali_sectors(year: int, round_number: int, session_name: str):
+    """
+    Return per-sector timing and color rankings for a qualifying session.
+    For each driver returns S1/S2/S3 times (seconds) and purple/green/yellow/red
+    color for each sector in Q1, Q2, Q3 segments.
+    """
+    def _load():
+        s = fastf1.get_session(year, round_number, session_name)
+        s.load(laps=True, telemetry=False, weather=False, messages=False)
+        return s
+
+    try:
+        session = await run_blocking(_load)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    if session.results is None or session.results.empty:
+        return []
+
+    results = session.results
+    laps = session.laps
+
+    def get_sector_times(abbr: str, q_time):
+        if pd.isna(q_time):
+            return None
+        driver_laps = laps[laps["Driver"] == abbr]
+        if driver_laps.empty:
+            return None
+        diff = (driver_laps["LapTime"] - q_time).abs()
+        best_idx = diff.idxmin()
+        if diff[best_idx] > pd.Timedelta("1s"):
+            return None
+        lap = driver_laps.loc[best_idx]
+        def td(col):
+            v = lap[col]
+            return v.total_seconds() if not pd.isna(v) else None
+        return {"s1": td("Sector1Time"), "s2": td("Sector2Time"), "s3": td("Sector3Time")}
+
+    # Collect raw sector data per driver per Q segment
+    raw: dict = {}
+    for _, row in results.iterrows():
+        abbr = str(row["Abbreviation"])
+        raw[abbr] = {
+            "q1": get_sector_times(abbr, row.get("Q1")),
+            "q2": get_sector_times(abbr, row.get("Q2")),
+            "q3": get_sector_times(abbr, row.get("Q3")),
+        }
+
+    # Compute colors per Q segment × sector
+    color_maps: dict = {}
+    for q in ("q1", "q2", "q3"):
+        color_maps[q] = {}
+        for s in ("s1", "s2", "s3"):
+            times = {
+                abbr: data[q][s]
+                for abbr, data in raw.items()
+                if data.get(q) and data[q].get(s) is not None
+            }
+            color_maps[q][s] = _assign_sector_colors(times)
+
+    # Assemble response in results order
+    output = []
+    for _, row in results.iterrows():
+        abbr = str(row["Abbreviation"])
+        entry = {"abbreviation": abbr}
+        for q in ("q1", "q2", "q3"):
+            seg = raw.get(abbr, {}).get(q)
+            if seg is None:
+                entry[q] = None
+            else:
+                entry[q] = {
+                    "s1": seg.get("s1"),
+                    "s2": seg.get("s2"),
+                    "s3": seg.get("s3"),
+                    "s1Color": color_maps[q]["s1"].get(abbr),
+                    "s2Color": color_maps[q]["s2"].get(abbr),
+                    "s3Color": color_maps[q]["s3"].get(abbr),
+                }
+        output.append(entry)
+
+    return output
+
+
+# ---------------------------------------------------------------------------
 # Historical – Driver list for a session
 # ---------------------------------------------------------------------------
 

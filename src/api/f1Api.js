@@ -18,3 +18,10 @@ export async function fetchResults(year, round, sessionName) {
   if (!res.ok) throw new Error(`Failed to fetch results (${res.status})`)
   return res.json()
 }
+
+export async function fetchQualiSectors(year, round, sessionName) {
+  const encoded = encodeURIComponent(sessionName)
+  const res = await fetch(`${BASE_URL}/quali-sectors/${year}/${round}/${encoded}`)
+  if (!res.ok) throw new Error(`Failed to fetch quali sectors (${res.status})`)
+  return res.json()
+}
