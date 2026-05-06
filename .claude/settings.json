@@ -1,7 +1,11 @@
 {
   "permissions": {
     "allow": [
-      "Bash(gh api *)"
+      "Bash(gh api *)",
+      "Bash(mkdir -p \"c:\\\\Users\\\\tito_\\\\workplace\\\\f1cronos\\\\backend\\\\cache\")"
+    ],
+    "additionalDirectories": [
+      "c:\\Users\\tito_\\workplace\\f1cronos\\backend"
     ]
   }
 }

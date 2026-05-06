@@ -59,3 +59,21 @@ Thumbs.db
 
 # Misc
 .npm
+
+# Python virtual environment
+backend/venv/
+venv/
+.venv/
+
+# Python bytecode
+__pycache__/
+*.py[cod]
+*.pyo
+
+# FastF1 telemetry cache
+backend/cache/
+
+# Python egg / dist artifacts
+*.egg-info/
+dist/
+*.egg
