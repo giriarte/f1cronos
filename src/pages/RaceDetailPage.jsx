@@ -51,6 +51,81 @@ function sessionType(name) {
   return 'race'
 }
 
+function DriverCard({ r, driverSectors, isQuali, isRace }) {
+  const pos = r.classifiedPosition || r.position || '—'
+  return (
+    <div className="driver-card">
+      <div className="card-header">
+        <span className="card-pos">{pos}</span>
+        <span className="card-team-bar" style={{ background: r.teamColor }} />
+        <div className="card-driver-info">
+          <span className="card-abbr">{r.abbreviation}</span>
+          <span className="card-name">{r.fullName}</span>
+        </div>
+        {isRace && r.points > 0 && (
+          <span className="card-pts">{r.points} pts</span>
+        )}
+      </div>
+
+      {isQuali ? (
+        <div className="card-q-rows">
+          {[['Q1', r.q1, driverSectors?.q1], ['Q2', r.q2, driverSectors?.q2], ['Q3', r.q3, driverSectors?.q3]].map(
+            ([label, time, seg]) => time && (
+              <div key={label} className="card-q-row">
+                <span className="card-q-label">{label}</span>
+                <span className="card-q-time">{time}</span>
+                {seg && (
+                  <div className="card-sectors">
+                    {['s1', 's2', 's3'].map((s) => {
+                      const c = SECTOR_COLORS[seg[`${s}Color`]] ?? '#555'
+                      const t = seg[s] != null ? seg[s].toFixed(3) : '—'
+                      return (
+                        <div key={s} className="card-sector-group">
+                          <div className="card-micro-row">
+                            <span className="card-micro" style={{ background: c }} />
+                            <span className="card-micro" style={{ background: c }} />
+                            <span className="card-micro" style={{ background: c }} />
+                          </div>
+                          <span className="card-sector-time" style={{ color: c }}>{t}</span>
+                        </div>
+                      )
+                    })}
+                  </div>
+                )}
+              </div>
+            )
+          )}
+        </div>
+      ) : (
+        <div className="card-result-row">
+          <span className="card-time">{r.time ?? '—'}</span>
+          {isRace && <span className="card-grid">Grid {r.gridPosition ?? '—'}</span>}
+          <span className="card-status">{r.status}</span>
+        </div>
+      )}
+    </div>
+  )
+}
+
+function MobileResults({ results, session, sectors }) {
+  const type = sessionType(session)
+  const isQuali = type === 'qualifying'
+  const isRace = type === 'race' || type === 'sprint'
+  return (
+    <div className="results-cards">
+      {results.map((r) => (
+        <DriverCard
+          key={r.driverNumber}
+          r={r}
+          driverSectors={sectors[r.abbreviation]}
+          isQuali={isQuali}
+          isRace={isRace}
+        />
+      ))}
+    </div>
+  )
+}
+
 function ResultsTable({ results, session, sectors }) {
   const type = sessionType(session)
   const isQuali = type === 'qualifying'
@@ -192,7 +267,10 @@ export default function RaceDetailPage() {
         {loadingResults && <p className="status-message">Loading results…</p>}
         {error && <p className="status-message error">Error: {error}</p>}
         {!loadingResults && !error && results.length > 0 && (
-          <ResultsTable results={results} session={selectedSession} sectors={sectors} />
+          <>
+            <ResultsTable results={results} session={selectedSession} sectors={sectors} />
+            <MobileResults results={results} session={selectedSession} sectors={sectors} />
+          </>
         )}
       </div>
     </div>

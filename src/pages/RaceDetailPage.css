@@ -238,6 +238,197 @@
   font-size: 12px;
 }
 
+/* ── Mobile card layout ── */
+
+.results-cards {
+  display: none;
+}
+
+.driver-card {
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.card-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 12px 14px;
+}
+
+.card-pos {
+  font-size: 15px;
+  font-weight: 700;
+  color: var(--text-primary);
+  min-width: 22px;
+  text-align: right;
+}
+
+.card-team-bar {
+  width: 3px;
+  height: 32px;
+  border-radius: 2px;
+  flex-shrink: 0;
+}
+
+.card-driver-info {
+  flex: 1;
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  min-width: 0;
+}
+
+.card-abbr {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.card-name {
+  font-size: 12px;
+  color: var(--text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.card-pts {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-primary);
+  background: rgba(255,255,255,0.07);
+  padding: 2px 7px;
+  border-radius: 10px;
+  white-space: nowrap;
+}
+
+.card-q-rows {
+  border-top: 1px solid var(--border);
+}
+
+.card-q-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 14px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+
+.card-q-row:last-child {
+  border-bottom: none;
+}
+
+.card-q-label {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  min-width: 18px;
+}
+
+.card-q-time {
+  font-variant-numeric: tabular-nums;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  color: var(--text-primary);
+  min-width: 62px;
+}
+
+.card-sectors {
+  display: flex;
+  gap: 5px;
+  margin-left: auto;
+}
+
+.card-sector-group {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+}
+
+.card-micro-row {
+  display: flex;
+  gap: 2px;
+}
+
+.card-micro {
+  display: inline-block;
+  width: 8px;
+  height: 5px;
+  border-radius: 1px;
+  opacity: 0.85;
+}
+
+.card-sector-time {
+  font-variant-numeric: tabular-nums;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 8px;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.card-result-row {
+  border-top: 1px solid var(--border);
+  padding: 9px 14px;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.card-time {
+  font-variant-numeric: tabular-nums;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.card-grid {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.card-status {
+  font-size: 11px;
+  color: var(--text-secondary);
+  margin-left: auto;
+}
+
+@media (max-width: 767px) {
+  .detail-header {
+    padding: 14px 16px;
+    flex-wrap: wrap;
+    gap: 10px;
+  }
+
+  .detail-header-right {
+    width: 100%;
+  }
+
+  .session-select {
+    width: 100%;
+    box-sizing: border-box;
+  }
+
+  .detail-body {
+    padding: 12px 16px;
+  }
+
+  .results-wrapper {
+    display: none;
+  }
+
+  .results-cards {
+    display: flex;
+    flex-direction: column;
+    gap: 6px;
+  }
+}
+
 .status-message {
   color: var(--text-secondary);
   font-size: 14px;

@@ -163,36 +163,19 @@ def _td_to_laptime(td) -> str | None:
     return f"{mins}:{secs:06.3f}" if mins > 0 else f"{secs:.3f}"
 
 
-@app.get("/results/{year}/{round_number}/{session_name}")
-async def get_session_results(year: int, round_number: int, session_name: str):
-    """
-    Return finishing results for any session type.
-    session_name must match exactly what /sessions returns (e.g. 'Race', 'Qualifying', 'Practice 1').
-    """
-    def _load():
-        s = fastf1.get_session(year, round_number, session_name)
-        s.load(telemetry=False, weather=False, messages=False)
-        return s
-
-    try:
-        session = await run_blocking(_load)
-    except Exception as e:
-        raise HTTPException(status_code=404, detail=str(e))
-
-    if session.results is None or session.results.empty:
-        return []
-
+def _build_results_from_session(session) -> list:
+    """Build result rows from session.results (race / qualifying / sprint)."""
     rows = []
     for _, r in session.results.iterrows():
         rows.append({
-            "position":          int(r["Position"]) if pd.notna(r.get("Position")) else None,
+            "position":           int(r["Position"]) if pd.notna(r.get("Position")) else None,
             "classifiedPosition": str(r.get("ClassifiedPosition", "")),
-            "driverNumber":      str(r.get("DriverNumber", "")),
-            "abbreviation":      str(r.get("Abbreviation", "")),
-            "fullName":          str(r.get("FullName", "")),
-            "teamName":          str(r.get("TeamName", "")),
-            "teamColor":         f"#{r.get('TeamColor', 'ffffff')}",
-            "gridPosition":      int(r["GridPosition"]) if pd.notna(r.get("GridPosition")) else None,
+            "driverNumber":       str(r.get("DriverNumber", "")),
+            "abbreviation":       str(r.get("Abbreviation", "")),
+            "fullName":           str(r.get("FullName", "")),
+            "teamName":           str(r.get("TeamName", "")),
+            "teamColor":          f"#{r.get('TeamColor', 'ffffff')}",
+            "gridPosition":       int(r["GridPosition"]) if pd.notna(r.get("GridPosition")) else None,
             "q1":    _td_to_laptime(r.get("Q1")),
             "q2":    _td_to_laptime(r.get("Q2")),
             "q3":    _td_to_laptime(r.get("Q3")),
@@ -201,6 +184,83 @@ async def get_session_results(year: int, round_number: int, session_name: str):
             "points": float(r["Points"]) if pd.notna(r.get("Points")) else 0,
         })
     return rows
+
+
+def _build_results_from_laps(session) -> list:
+    """Derive practice results from fastest valid lap per driver."""
+    laps = session.laps
+    if laps is None or laps.empty:
+        return []
+
+    valid = laps[laps["LapTime"].notna()]
+    if valid.empty:
+        return []
+
+    fastest = (
+        valid.groupby("Driver")["LapTime"]
+        .min()
+        .reset_index()
+        .rename(columns={"Driver": "Abbreviation", "LapTime": "BestLap"})
+        .sort_values("BestLap")
+        .reset_index(drop=True)
+    )
+
+    p1_time = fastest.iloc[0]["BestLap"]
+    rows = []
+    for pos, row in fastest.iterrows():
+        abbr = row["Abbreviation"]
+        try:
+            info = session.get_driver(abbr)
+        except Exception:
+            info = {}
+        gap = row["BestLap"] - p1_time
+        gap_str = f"+{gap.total_seconds():.3f}s" if pos > 0 else None
+        rows.append({
+            "position":           pos + 1,
+            "classifiedPosition": str(pos + 1),
+            "driverNumber":       str(info.get("DriverNumber", "")),
+            "abbreviation":       abbr,
+            "fullName":           str(info.get("FullName", "")),
+            "teamName":           str(info.get("TeamName", "")),
+            "teamColor":          f"#{info.get('TeamColor', 'ffffff')}",
+            "gridPosition":       None,
+            "q1":                 None,
+            "q2":                 None,
+            "q3":                 None,
+            "time":               _td_to_laptime(row["BestLap"]) if pos == 0 else gap_str,
+            "status":             "",
+            "points":             0,
+        })
+    return rows
+
+
+@app.get("/results/{year}/{round_number}/{session_name}")
+async def get_session_results(year: int, round_number: int, session_name: str):
+    """
+    Return finishing results for any session type.
+    session_name must match exactly what /sessions returns (e.g. 'Race', 'Qualifying', 'Practice 1').
+    Practice sessions are derived from fastest lap per driver since they have no formal results.
+    """
+    def _load():
+        s = fastf1.get_session(year, round_number, session_name)
+        n = session_name.lower()
+        # Sprint qualifying/shootout results are derived from timing data and require
+        # race control messages to account for deleted lap times.
+        needs_messages = ("sprint" in n and "qualifying" in n) or "shootout" in n
+        s.load(telemetry=False, weather=False, messages=needs_messages)
+        return s
+
+    try:
+        session = await run_blocking(_load)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=str(e))
+
+    # Practice sessions have results populated but Time is always NaT; use laps instead.
+    is_practice = "practice" in session_name.lower()
+    if not is_practice and session.results is not None and not session.results.empty:
+        return _build_results_from_session(session)
+
+    return _build_results_from_laps(session)
 
 
 # ---------------------------------------------------------------------------
