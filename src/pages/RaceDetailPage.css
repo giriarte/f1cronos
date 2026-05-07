@@ -438,3 +438,34 @@
 .status-message.error {
   color: var(--red);
 }
+
+/* ── Standings section ── */
+
+.standings-section {
+  margin-top: 40px;
+}
+
+.standings-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 0 0 12px;
+}
+
+.col-team-name {
+  min-width: 140px;
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
+.standings-pts {
+  font-size: 13px !important;
+  font-weight: 700 !important;
+  color: var(--text-primary) !important;
+}
+
+.standings-loading {
+  margin-top: 40px;
+}

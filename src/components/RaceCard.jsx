@@ -8,16 +8,11 @@ function formatDate(dateStr) {
   return `${d.getDate()} ${MONTH_SHORT[d.getMonth()]} ${d.getFullYear()}`
 }
 
-export default function RaceCard({ race, year }) {
+function CardContent({ race, year }) {
   const { round, name, circuit, country, countryCode, trackMap, date, status } = race
   const label = name.replace(' Grand Prix', '')
-
   return (
-    <Link
-      to={`/race/${year}/${round}`}
-      state={{ race }}
-      className={`race-card ${status}`}
-    >
+    <>
       {trackMap && (
         <img
           className="race-card-track"
@@ -48,6 +43,28 @@ export default function RaceCard({ race, year }) {
       {status === 'cancelled' && (
         <div className="race-card-badge cancelled">Cancelled</div>
       )}
+    </>
+  )
+}
+
+export default function RaceCard({ race, year }) {
+  const { round, status } = race
+
+  if (status === 'cancelled') {
+    return (
+      <div className="race-card cancelled">
+        <CardContent race={race} year={year} />
+      </div>
+    )
+  }
+
+  return (
+    <Link
+      to={`/race/${year}/${round}`}
+      state={{ race }}
+      className={`race-card ${status}`}
+    >
+      <CardContent race={race} year={year} />
     </Link>
   )
 }

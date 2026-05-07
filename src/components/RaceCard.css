@@ -101,3 +101,14 @@ a.race-card {
   background: rgba(255,255,255,0.05);
   color: var(--text-muted);
 }
+
+div.race-card.cancelled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+div.race-card.cancelled:hover {
+  border-color: var(--border);
+  box-shadow: none;
+  transform: none;
+}

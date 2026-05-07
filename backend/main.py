@@ -38,6 +38,30 @@ def run_blocking(func, *args, **kwargs):
     return loop.run_in_executor(None, lambda: func(*args, **kwargs))
 
 
+def _resolve_round(schedule: pd.DataFrame, round_number: int, event_date: Optional[str]) -> int:
+    """
+    Return the FastF1 round number that best matches event_date.
+    Finds the schedule row whose EventDate is within 10 days of event_date.
+    Falls back to round_number when no date is given or no close match exists.
+    This compensates for round renumbering when races are cancelled mid-season.
+    """
+    if not event_date:
+        return round_number
+    try:
+        target = pd.Timestamp(event_date).normalize()
+        dates = schedule["EventDate"].copy()
+        if hasattr(dates.dt, "tz") and dates.dt.tz is not None:
+            dates = dates.dt.tz_localize(None)
+        dates = dates.dt.normalize()
+        diffs = (dates - target).abs()
+        idx = diffs.idxmin()
+        if diffs[idx] <= pd.Timedelta("10 days"):
+            return int(schedule.loc[idx, "RoundNumber"])
+    except Exception:
+        pass
+    return round_number
+
+
 def load_session(year: int, round_number: int, session_type: str) -> fastf1.core.Session:
     session = fastf1.get_session(year, round_number, session_type)
     session.load(telemetry=True, weather=False, messages=False)
@@ -131,10 +155,12 @@ async def get_lap_telemetry(
 # ---------------------------------------------------------------------------
 
 @app.get("/sessions/{year}/{round_number}")
-async def get_available_sessions(year: int, round_number: int):
+async def get_available_sessions(year: int, round_number: int, event_date: Optional[str] = None):
     """Return the ordered list of sessions for a round (e.g. Practice 1, Qualifying, Race)."""
     def _load():
-        return fastf1.get_event(year, round_number)
+        schedule = fastf1.get_event_schedule(year, include_testing=False)
+        real_round = _resolve_round(schedule, round_number, event_date)
+        return fastf1.get_event(year, real_round)
 
     try:
         event = await run_blocking(_load)
@@ -235,14 +261,16 @@ def _build_results_from_laps(session) -> list:
 
 
 @app.get("/results/{year}/{round_number}/{session_name}")
-async def get_session_results(year: int, round_number: int, session_name: str):
+async def get_session_results(year: int, round_number: int, session_name: str, event_date: Optional[str] = None):
     """
     Return finishing results for any session type.
     session_name must match exactly what /sessions returns (e.g. 'Race', 'Qualifying', 'Practice 1').
     Practice sessions are derived from fastest lap per driver since they have no formal results.
     """
     def _load():
-        s = fastf1.get_session(year, round_number, session_name)
+        schedule = fastf1.get_event_schedule(year, include_testing=False)
+        real_round = _resolve_round(schedule, round_number, event_date)
+        s = fastf1.get_session(year, real_round, session_name)
         n = session_name.lower()
         # Sprint qualifying/shootout results are derived from timing data and require
         # race control messages to account for deleted lap times.
@@ -287,14 +315,16 @@ def _assign_sector_colors(times: dict) -> dict:
 
 
 @app.get("/quali-sectors/{year}/{round_number}/{session_name}")
-async def get_quali_sectors(year: int, round_number: int, session_name: str):
+async def get_quali_sectors(year: int, round_number: int, session_name: str, event_date: Optional[str] = None):
     """
     Return per-sector timing and color rankings for a qualifying session.
     For each driver returns S1/S2/S3 times (seconds) and purple/green/yellow/red
     color for each sector in Q1, Q2, Q3 segments.
     """
     def _load():
-        s = fastf1.get_session(year, round_number, session_name)
+        schedule = fastf1.get_event_schedule(year, include_testing=False)
+        real_round = _resolve_round(schedule, round_number, event_date)
+        s = fastf1.get_session(year, real_round, session_name)
         s.load(laps=True, telemetry=False, weather=False, messages=False)
         return s
 
@@ -368,6 +398,70 @@ async def get_quali_sectors(year: int, round_number: int, session_name: str):
         output.append(entry)
 
     return output
+
+
+# ---------------------------------------------------------------------------
+# Historical – Driver Championship Standings up to a round
+# ---------------------------------------------------------------------------
+
+@app.get("/standings/{year}/{round_number}")
+async def get_driver_standings(year: int, round_number: int, event_date: Optional[str] = None):
+    """
+    Return driver championship standings after the given round.
+    Aggregates points from Race and Sprint sessions.
+    When event_date is provided it is used as the cutoff (resilient to round-number
+    renumbering that happens when races are cancelled).
+    """
+    def _compute():
+        schedule = fastf1.get_event_schedule(year, include_testing=False)
+        if event_date:
+            cutoff = pd.Timestamp(event_date)
+            completed = schedule[schedule["EventDate"] <= cutoff]
+        else:
+            completed = schedule[schedule["RoundNumber"] <= round_number]
+
+        points_map: dict = {}
+
+        for _, event in completed.iterrows():
+            rn = int(event["RoundNumber"])
+            for i in range(1, 6):
+                name = event.get(f"Session{i}", "")
+                if not name or str(name) in ("", "None", "nan"):
+                    continue
+                n = str(name).strip().lower()
+                if n not in ("race", "sprint"):
+                    continue
+                try:
+                    s = fastf1.get_session(year, rn, str(name))
+                    s.load(telemetry=False, weather=False, messages=False, laps=False)
+                    if s.results is None or s.results.empty:
+                        continue
+                    for _, r in s.results.iterrows():
+                        abbr = str(r.get("Abbreviation", ""))
+                        if not abbr:
+                            continue
+                        pts = float(r["Points"]) if pd.notna(r.get("Points")) else 0
+                        if abbr not in points_map:
+                            points_map[abbr] = {
+                                "abbreviation": abbr,
+                                "fullName": str(r.get("FullName", "")),
+                                "teamName": str(r.get("TeamName", "")),
+                                "teamColor": f"#{r.get('TeamColor', 'ffffff')}",
+                                "points": 0,
+                            }
+                        points_map[abbr]["points"] += pts
+                except Exception:
+                    continue
+
+        standings = sorted(points_map.values(), key=lambda x: x["points"], reverse=True)
+        for i, driver in enumerate(standings):
+            driver["position"] = i + 1
+        return standings
+
+    try:
+        return await run_blocking(_compute)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=str(e))
 
 
 # ---------------------------------------------------------------------------

@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
 import { useParams, useLocation, Link } from 'react-router-dom'
-import { fetchSessions, fetchResults, fetchQualiSectors } from '../api/f1Api'
+import { fetchSessions, fetchResults, fetchQualiSectors, fetchStandings } from '../api/f1Api'
 import './RaceDetailPage.css'
 
 const SECTOR_COLORS = {
@@ -179,6 +179,44 @@ function ResultsTable({ results, session, sectors }) {
   )
 }
 
+function StandingsTable({ standings }) {
+  if (!standings.length) return null
+  return (
+    <div className="standings-section">
+      <h2 className="standings-title">Driver Championship Standings</h2>
+      <div className="results-wrapper">
+        <table className="results-table">
+          <thead>
+            <tr>
+              <th className="col-pos">POS</th>
+              <th className="col-team-icon"></th>
+              <th className="col-driver">Driver</th>
+              <th className="col-team-name">Team</th>
+              <th className="col-pts standings-pts">PTS</th>
+            </tr>
+          </thead>
+          <tbody>
+            {standings.map((d, i) => (
+              <tr key={d.abbreviation} className={i % 2 === 0 ? 'row-even' : ''}>
+                <td className="col-pos">{d.position}</td>
+                <td className="col-team-icon">
+                  <span className="team-bar" style={{ background: d.teamColor }} />
+                </td>
+                <td className="col-driver">
+                  <span className="driver-abbr">{d.abbreviation}</span>
+                  <span className="driver-name">{d.fullName}</span>
+                </td>
+                <td className="col-team-name">{d.teamName}</td>
+                <td className="col-pts standings-pts">{d.points}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 export default function RaceDetailPage() {
   const { year, round } = useParams()
   const { state } = useLocation()
@@ -191,10 +229,16 @@ export default function RaceDetailPage() {
   const [loadingResults, setLoadingResults] = useState(false)
   const [error, setError] = useState(null)
   const [sectors, setSectors] = useState({})
+  const [standings, setStandings] = useState([])
+  const [loadingStandings, setLoadingStandings] = useState(false)
 
   useEffect(() => {
+    if (race?.status === 'cancelled') {
+      setLoadingSessions(false)
+      return
+    }
     setLoadingSessions(true)
-    fetchSessions(year, round)
+    fetchSessions(year, round, race?.date)
       .then((data) => {
         setSessions(data)
         setSelectedSession(data.at(-1)?.name ?? null)
@@ -210,7 +254,7 @@ export default function RaceDetailPage() {
     setError(null)
     setResults([])
 
-    fetchResults(year, round, selectedSession)
+    fetchResults(year, round, selectedSession, race?.date)
       .then((data) => { if (!cancelled) setResults(data) })
       .catch((err) => { if (!cancelled) setError(err.message) })
       .finally(() => { if (!cancelled) setLoadingResults(false) })
@@ -219,10 +263,25 @@ export default function RaceDetailPage() {
   }, [selectedSession, year, round])
 
   useEffect(() => {
+    const type = sessionType(selectedSession)
+    if (type !== 'race' && type !== 'sprint') {
+      setStandings([])
+      return
+    }
+    let cancelled = false
+    setLoadingStandings(true)
+    fetchStandings(year, round, race?.date)
+      .then((data) => { if (!cancelled) setStandings(data) })
+      .catch(() => { if (!cancelled) setStandings([]) })
+      .finally(() => { if (!cancelled) setLoadingStandings(false) })
+    return () => { cancelled = true }
+  }, [selectedSession, year, round])
+
+  useEffect(() => {
     setSectors({})
     if (!selectedSession || sessionType(selectedSession) !== 'qualifying') return
     let cancelled = false
-    fetchQualiSectors(year, round, selectedSession)
+    fetchQualiSectors(year, round, selectedSession, race?.date)
       .then((data) => {
         if (cancelled) return
         const map = {}
@@ -264,12 +323,22 @@ export default function RaceDetailPage() {
       </div>
 
       <div className="detail-body">
-        {loadingResults && <p className="status-message">Loading results…</p>}
-        {error && <p className="status-message error">Error: {error}</p>}
-        {!loadingResults && !error && results.length > 0 && (
+        {race?.status === 'cancelled' ? (
+          <p className="status-message cancelled-notice">This race was cancelled.</p>
+        ) : (
           <>
-            <ResultsTable results={results} session={selectedSession} sectors={sectors} />
-            <MobileResults results={results} session={selectedSession} sectors={sectors} />
+            {loadingResults && <p className="status-message">Loading results…</p>}
+            {error && <p className="status-message error">Error: {error}</p>}
+            {!loadingResults && !error && results.length > 0 && (
+              <>
+                <ResultsTable results={results} session={selectedSession} sectors={sectors} />
+                <MobileResults results={results} session={selectedSession} sectors={sectors} />
+              </>
+            )}
+            {loadingStandings && <p className="status-message standings-loading">Loading standings…</p>}
+            {!loadingStandings && standings.length > 0 && (
+              <StandingsTable standings={standings} />
+            )}
           </>
         )}
       </div>
