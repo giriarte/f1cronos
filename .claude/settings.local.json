@@ -1,0 +1,9 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx vite *)",
+      "PowerShell(Get-ChildItem \"c:\\\\Users\\\\tito_\\\\workplace\\\\f1cronos\\\\backend\\\\venv\\\\Lib\\\\site-packages\" | Select-Object Name | Where-Object { $_.Name -match \"fast\" })",
+      "PowerShell(& \"c:\\\\Users\\\\tito_\\\\workplace\\\\f1cronos\\\\backend\\\\venv\\\\Scripts\\\\python.exe\" -c \"import fastf1; print\\(fastf1.__version__\\)\")"
+    ]
+  }
+}

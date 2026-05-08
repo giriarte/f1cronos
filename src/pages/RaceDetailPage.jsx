@@ -51,7 +51,7 @@ function sessionType(name) {
   return 'race'
 }
 
-function DriverCard({ r, driverSectors, isQuali, isRace }) {
+function DriverCard({ r, driverSectors, isQuali, isRace, detailsTo, detailsState }) {
   const pos = r.classifiedPosition || r.position || '—'
   return (
     <div className="driver-card">
@@ -101,16 +101,22 @@ function DriverCard({ r, driverSectors, isQuali, isRace }) {
           <span className="card-time">{r.time ?? '—'}</span>
           {isRace && <span className="card-grid">Grid {r.gridPosition ?? '—'}</span>}
           <span className="card-status">{r.status}</span>
+          {isRace && detailsTo && (
+            <Link to={detailsTo} state={detailsState} className="card-details-btn">Details</Link>
+          )}
         </div>
       )}
     </div>
   )
 }
 
-function MobileResults({ results, session, sectors }) {
+function MobileResults({ results, session, sectors, year, round, race }) {
   const type = sessionType(session)
   const isQuali = type === 'qualifying'
   const isRace = type === 'race' || type === 'sprint'
+  const driverColorMap = isRace
+    ? Object.fromEntries(results.map(r => [r.abbreviation, r.teamColor]))
+    : {}
   return (
     <div className="results-cards">
       {results.map((r) => (
@@ -120,16 +126,21 @@ function MobileResults({ results, session, sectors }) {
           driverSectors={sectors[r.abbreviation]}
           isQuali={isQuali}
           isRace={isRace}
+          detailsTo={isRace ? `/race/${year}/${round}/laps` : undefined}
+          detailsState={isRace ? { race, initialDriver: r.abbreviation, sessionName: session, driverColorMap } : undefined}
         />
       ))}
     </div>
   )
 }
 
-function ResultsTable({ results, session, sectors }) {
+function ResultsTable({ results, session, sectors, year, round, race }) {
   const type = sessionType(session)
   const isQuali = type === 'qualifying'
   const isRace = type === 'race' || type === 'sprint'
+  const driverColorMap = isRace
+    ? Object.fromEntries(results.map(r => [r.abbreviation, r.teamColor]))
+    : {}
 
   return (
     <div className="results-wrapper">
@@ -144,6 +155,7 @@ function ResultsTable({ results, session, sectors }) {
             {isQuali && <th className="col-q">Q2</th>}
             {isQuali && <th className="col-q">Q3</th>}
             {!isQuali && <th className="col-time">Time / Gap</th>}
+            {isRace && <th className="col-details"></th>}
             {isRace && <th className="col-grid">Grid</th>}
             {isRace && <th className="col-pts">PTS</th>}
             {!isQuali && <th className="col-status">Status</th>}
@@ -167,6 +179,17 @@ function ResultsTable({ results, session, sectors }) {
                 {isQuali && <QCell lapTime={r.q2} seg={driverSectors?.q2} />}
                 {isQuali && <QCell lapTime={r.q3} seg={driverSectors?.q3} />}
                 {!isQuali && <td className="col-time mono">{r.time ?? '—'}</td>}
+                {isRace && (
+                  <td className="col-details">
+                    <Link
+                      to={`/race/${year}/${round}/laps`}
+                      state={{ race, initialDriver: r.abbreviation, sessionName: session, driverColorMap }}
+                      className="details-btn"
+                    >
+                      Details
+                    </Link>
+                  </td>
+                )}
                 {isRace && <td className="col-grid">{r.gridPosition ?? '—'}</td>}
                 {isRace && <td className="col-pts">{r.points > 0 ? r.points : ''}</td>}
                 {!isQuali && <td className="col-status">{r.status}</td>}
@@ -331,8 +354,8 @@ export default function RaceDetailPage() {
             {error && <p className="status-message error">Error: {error}</p>}
             {!loadingResults && !error && results.length > 0 && (
               <>
-                <ResultsTable results={results} session={selectedSession} sectors={sectors} />
-                <MobileResults results={results} session={selectedSession} sectors={sectors} />
+                <ResultsTable results={results} session={selectedSession} sectors={sectors} year={year} round={round} race={race} />
+                <MobileResults results={results} session={selectedSession} sectors={sectors} year={year} round={round} race={race} />
               </>
             )}
             {loadingStandings && <p className="status-message standings-loading">Loading standings…</p>}

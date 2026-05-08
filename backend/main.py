@@ -105,17 +105,40 @@ async def get_driver_laps(year: int, round_number: int, session_type: str, drive
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
 
-    laps = session.laps.pick_drivers(driver)
-    if laps.empty:
-        raise HTTPException(status_code=404, detail=f"Driver {driver} not found in session")
+    try:
+        laps = session.laps.pick_drivers([driver])
+        if laps.empty:
+            raise HTTPException(status_code=404, detail=f"Driver {driver} not found in session")
 
-    cols = ["LapNumber", "LapTime", "Sector1Time", "Sector2Time", "Sector3Time",
-            "SpeedI1", "SpeedI2", "SpeedFL", "SpeedST", "Compound", "IsPersonalBest"]
-    result = laps[cols].copy()
-    # Convert timedeltas to seconds for JSON serialisation
-    for col in ["LapTime", "Sector1Time", "Sector2Time", "Sector3Time"]:
-        result[col] = result[col].dt.total_seconds()
-    return result.to_dict(orient="records")
+        desired_cols = [
+            "LapNumber", "LapTime", "Sector1Time", "Sector2Time", "Sector3Time",
+            "SpeedI1", "SpeedI2", "SpeedFL", "SpeedST", "Compound", "IsPersonalBest",
+        ]
+        available_cols = [c for c in desired_cols if c in laps.columns]
+        result = laps[available_cols].copy()
+
+        timedelta_cols = ["LapTime", "Sector1Time", "Sector2Time", "Sector3Time"]
+        for col in timedelta_cols:
+            if col in result.columns:
+                try:
+                    result[col] = result[col].dt.total_seconds()
+                except Exception:
+                    result[col] = None
+
+        # float('nan') is not valid JSON — convert to None at Python dict level
+        import math
+        records = result.to_dict(orient="records")
+        def _clean(v):
+            if isinstance(v, float) and math.isnan(v):
+                return None
+            return v
+        return [{k: _clean(v) for k, v in row.items()} for row in records]
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback
+        raise HTTPException(status_code=500, detail=f"{e}\n{traceback.format_exc()}")
 
 
 # ---------------------------------------------------------------------------
@@ -478,13 +501,13 @@ async def get_drivers(year: int, round_number: int, session_type: str):
 
     drivers = session.drivers
     results = []
-    for abbr in drivers:
-        info = session.get_driver(abbr)
+    for driver_id in drivers:
+        info = session.get_driver(driver_id)
         results.append({
-            "abbreviation": abbr,
+            "abbreviation": info.get("Abbreviation", driver_id),
             "full_name": info.get("FullName", ""),
             "team": info.get("TeamName", ""),
-            "number": info.get("DriverNumber", ""),
+            "number": info.get("DriverNumber", driver_id),
         })
     return results
 

@@ -35,3 +35,17 @@ export async function fetchStandings(year, round, eventDate) {
   if (!res.ok) throw new Error(`Failed to fetch standings (${res.status})`)
   return res.json()
 }
+
+export async function fetchLaps(year, round, sessionName, driver) {
+  const encoded = encodeURIComponent(sessionName)
+  const res = await fetch(`${BASE_URL}/laps/${year}/${round}/${encoded}/${driver}`)
+  if (!res.ok) throw new Error(`Failed to fetch laps (${res.status})`)
+  return res.json()
+}
+
+export async function fetchDrivers(year, round, sessionName) {
+  const encoded = encodeURIComponent(sessionName)
+  const res = await fetch(`${BASE_URL}/drivers/${year}/${round}/${encoded}`)
+  if (!res.ok) throw new Error(`Failed to fetch drivers (${res.status})`)
+  return res.json()
+}
