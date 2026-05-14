@@ -202,7 +202,7 @@ function ResultsTable({ results, session, sectors, year, round, race }) {
   )
 }
 
-function StandingsTable({ standings }) {
+function StandingsTable({ standings, year, round }) {
   if (!standings.length) return null
   return (
     <div className="standings-section">
@@ -216,6 +216,7 @@ function StandingsTable({ standings }) {
               <th className="col-driver">Driver</th>
               <th className="col-team-name">Team</th>
               <th className="col-pts standings-pts">PTS</th>
+              <th className="col-details"></th>
             </tr>
           </thead>
           <tbody>
@@ -231,6 +232,15 @@ function StandingsTable({ standings }) {
                 </td>
                 <td className="col-team-name">{d.teamName}</td>
                 <td className="col-pts standings-pts">{d.points}</td>
+                <td className="col-details">
+                  <Link
+                    to={`/championship/${year}`}
+                    state={{ initialDriver: d.abbreviation, standings, round }}
+                    className="details-btn"
+                  >
+                    Stats
+                  </Link>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -360,7 +370,7 @@ export default function RaceDetailPage() {
             )}
             {loadingStandings && <p className="status-message standings-loading">Loading standings…</p>}
             {!loadingStandings && standings.length > 0 && (
-              <StandingsTable standings={standings} />
+              <StandingsTable standings={standings} year={year} round={round} />
             )}
           </>
         )}

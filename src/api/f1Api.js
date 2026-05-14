@@ -36,16 +36,36 @@ export async function fetchStandings(year, round, eventDate) {
   return res.json()
 }
 
-export async function fetchLaps(year, round, sessionName, driver) {
+export async function fetchLaps(year, round, sessionName, driver, eventDate) {
   const encoded = encodeURIComponent(sessionName)
-  const res = await fetch(`${BASE_URL}/laps/${year}/${round}/${encoded}/${driver}`)
+  const params = eventDate ? `?event_date=${encodeURIComponent(eventDate)}` : ''
+  const res = await fetch(`${BASE_URL}/laps/${year}/${round}/${encoded}/${driver}${params}`)
   if (!res.ok) throw new Error(`Failed to fetch laps (${res.status})`)
   return res.json()
 }
 
-export async function fetchDrivers(year, round, sessionName) {
+export async function fetchChampionshipProgression(year) {
+  const res = await fetch(`${BASE_URL}/championship-progression/${year}`)
+  if (!res.ok) throw new Error(`Failed to fetch championship progression (${res.status})`)
+  return res.json()
+}
+
+export async function fetchDriverStats(year) {
+  const res = await fetch(`${BASE_URL}/driver-stats/${year}`)
+  if (!res.ok) throw new Error(`Failed to fetch driver stats (${res.status})`)
+  return res.json()
+}
+
+export async function fetchNextEvent(year) {
+  const res = await fetch(`${BASE_URL}/next-event/${year}`)
+  if (!res.ok) throw new Error(`Failed to fetch next event (${res.status})`)
+  return res.json()
+}
+
+export async function fetchDrivers(year, round, sessionName, eventDate) {
   const encoded = encodeURIComponent(sessionName)
-  const res = await fetch(`${BASE_URL}/drivers/${year}/${round}/${encoded}`)
+  const params = eventDate ? `?event_date=${encodeURIComponent(eventDate)}` : ''
+  const res = await fetch(`${BASE_URL}/drivers/${year}/${round}/${encoded}${params}`)
   if (!res.ok) throw new Error(`Failed to fetch drivers (${res.status})`)
   return res.json()
 }

@@ -2,6 +2,7 @@ import { Routes, Route } from 'react-router-dom'
 import HomePage from './pages/HomePage'
 import RaceDetailPage from './pages/RaceDetailPage'
 import LapTimesPage from './pages/LapTimesPage'
+import ChampionshipProgressionPage from './pages/ChampionshipProgressionPage'
 import './App.css'
 
 export default function App() {
@@ -15,6 +16,7 @@ export default function App() {
         <Route path="/" element={<HomePage />} />
         <Route path="/race/:year/:round" element={<RaceDetailPage />} />
         <Route path="/race/:year/:round/laps" element={<LapTimesPage />} />
+        <Route path="/championship/:year" element={<ChampionshipProgressionPage />} />
       </Routes>
     </div>
   )

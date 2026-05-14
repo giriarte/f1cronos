@@ -93,8 +93,8 @@ a.race-card {
 }
 
 .race-card-badge.upcoming {
-  background: var(--bg-hover);
-  color: var(--text-muted);
+  background: rgba(0, 120, 255, 0.12);
+  color: #4da6ff;
 }
 
 .race-card-badge.cancelled {
@@ -102,12 +102,14 @@ a.race-card {
   color: var(--text-muted);
 }
 
-div.race-card.cancelled {
+div.race-card.cancelled,
+div.race-card.upcoming {
   cursor: default;
   opacity: 0.55;
 }
 
-div.race-card.cancelled:hover {
+div.race-card.cancelled:hover,
+div.race-card.upcoming:hover {
   border-color: var(--border);
   box-shadow: none;
   transform: none;

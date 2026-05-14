@@ -43,6 +43,7 @@ export default function LapTimesPage() {
   const [selectedDrivers, setSelectedDrivers] = useState(initialDriver ? [initialDriver] : [])
   const [lapsData, setLapsData] = useState({})
   const [loadingLaps, setLoadingLaps] = useState({})
+  const [lapLoadErrors, setLapLoadErrors] = useState({})
   const [loadingDrivers, setLoadingDrivers] = useState(true)
   const [dropdownOpen, setDropdownOpen] = useState(false)
   const dropdownRef = useRef(null)
@@ -63,17 +64,18 @@ export default function LapTimesPage() {
     loadedSet.current.add(abbr)
     setLoadingLaps(prev => ({ ...prev, [abbr]: true }))
     try {
-      const data = await fetchLaps(year, round, sessionName, abbr)
+      const data = await fetchLaps(year, round, sessionName, abbr, race?.date)
       setLapsData(prev => ({ ...prev, [abbr]: data }))
     } catch {
       setLapsData(prev => ({ ...prev, [abbr]: [] }))
+      setLapLoadErrors(prev => ({ ...prev, [abbr]: true }))
     }
     setLoadingLaps(prev => ({ ...prev, [abbr]: false }))
   }
 
   useEffect(() => {
     if (!sessionName) return
-    fetchDrivers(year, round, sessionName)
+    fetchDrivers(year, round, sessionName, race?.date)
       .then(data => setAllDrivers(data))
       .catch(() => setAllDrivers([]))
       .finally(() => setLoadingDrivers(false))
@@ -103,6 +105,15 @@ export default function LapTimesPage() {
   }, [])
 
   const chartData = useMemo(() => {
+    const driverAvg = {}
+    selectedDrivers.forEach(abbr => {
+      const times = (lapsData[abbr] || [])
+        .map(lap => lap.LapTime)
+        .filter(t => t != null && !isNaN(t))
+      if (times.length > 0)
+        driverAvg[abbr] = times.reduce((a, b) => a + b, 0) / times.length
+    })
+
     const lapNums = new Set()
     selectedDrivers.forEach(abbr => {
       ;(lapsData[abbr] || []).forEach(lap => {
@@ -114,7 +125,10 @@ export default function LapTimesPage() {
       selectedDrivers.forEach(abbr => {
         const lap = (lapsData[abbr] || []).find(l => l.LapNumber === lapNum)
         if (lap && lap.LapTime != null && !isNaN(lap.LapTime)) {
-          point[abbr] = lap.LapTime
+          const avg = driverAvg[abbr]
+          if (avg == null || lap.LapTime <= avg * 1.06) {
+            point[abbr] = lap.LapTime
+          }
         }
       })
       return point
@@ -178,6 +192,12 @@ export default function LapTimesPage() {
 
       <div className="lap-body">
         {isAnyLoading && <p className="status-message">Loading lap data…</p>}
+        {Object.keys(lapLoadErrors).length > 0 && (
+          <p className="status-message error">
+            Lap data is not available for this session —{' '}
+            {Object.keys(lapLoadErrors).join(', ')}.
+          </p>
+        )}
         {!isAnyLoading && selectedDrivers.length === 0 && (
           <p className="status-message">Use the dropdown to select drivers and compare lap times.</p>
         )}

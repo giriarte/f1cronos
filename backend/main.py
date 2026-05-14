@@ -94,16 +94,24 @@ async def get_schedule(year: int):
 # ---------------------------------------------------------------------------
 
 @app.get("/laps/{year}/{round_number}/{session_type}/{driver}")
-async def get_driver_laps(year: int, round_number: int, session_type: str, driver: str):
+async def get_driver_laps(year: int, round_number: int, session_type: str, driver: str, event_date: Optional[str] = None):
     """
     Return all laps for a driver in a session.
     session_type: 'Q' for qualifying, 'R' for race, 'FP1' / 'FP2' / 'FP3'
     driver: three-letter code e.g. 'VER', 'HAM'
     """
+    def _load():
+        schedule = fastf1.get_event_schedule(year, include_testing=False)
+        real_round = _resolve_round(schedule, round_number, event_date)
+        return load_session(year, real_round, session_type)
+
     try:
-        session = await run_blocking(load_session, year, round_number, session_type)
+        session = await run_blocking(_load)
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
+
+    if not session.drivers:
+        raise HTTPException(status_code=404, detail="Lap data is not yet available for this session")
 
     try:
         laps = session.laps.pick_drivers([driver])
@@ -488,14 +496,246 @@ async def get_driver_standings(year: int, round_number: int, event_date: Optiona
 
 
 # ---------------------------------------------------------------------------
+# Historical – Championship position progression across rounds
+# ---------------------------------------------------------------------------
+
+@app.get("/championship-progression/{year}")
+async def get_championship_progression(year: int):
+    """
+    Return championship position and cumulative points for every driver after each
+    completed round of the season. Only rounds with at least one Race or Sprint
+    session are included.
+    """
+    def _compute():
+        schedule = fastf1.get_event_schedule(year, include_testing=False)
+        schedule = schedule.sort_values("RoundNumber")
+
+        # Normalise EventDate to timezone-naive for comparison
+        dates = schedule["EventDate"].copy()
+        if hasattr(dates.dt, "tz") and dates.dt.tz is not None:
+            dates = dates.dt.tz_localize(None)
+        now = pd.Timestamp.now()
+        past = schedule[dates <= now]
+
+        cumulative: dict = {}  # abbr -> {points, fullName, teamColor}
+        rounds = []
+
+        for _, event in past.iterrows():
+            rn = int(event["RoundNumber"])
+            short_name = str(event.get("EventName", f"Round {rn}")).replace(" Grand Prix", "").strip()
+
+            round_had_data = False
+            for i in range(1, 6):
+                sess_name = event.get(f"Session{i}", "")
+                if not sess_name or str(sess_name) in ("", "None", "nan"):
+                    continue
+                if str(sess_name).strip().lower() not in ("race", "sprint"):
+                    continue
+                try:
+                    s = fastf1.get_session(year, rn, str(sess_name))
+                    s.load(telemetry=False, weather=False, messages=False, laps=False)
+                    if s.results is None or s.results.empty:
+                        continue
+                    for _, r in s.results.iterrows():
+                        abbr = str(r.get("Abbreviation", ""))
+                        if not abbr:
+                            continue
+                        pts = float(r["Points"]) if pd.notna(r.get("Points")) else 0
+                        if abbr not in cumulative:
+                            cumulative[abbr] = {
+                                "points": 0,
+                                "fullName": str(r.get("FullName", "")),
+                                "teamColor": f"#{r.get('TeamColor', 'ffffff')}",
+                            }
+                        cumulative[abbr]["points"] += pts
+                        round_had_data = True
+                except Exception:
+                    continue
+
+            if not round_had_data:
+                continue
+
+            sorted_drivers = sorted(cumulative.items(), key=lambda x: x[1]["points"], reverse=True)
+            drivers_snap = {}
+            for pos, (abbr, data) in enumerate(sorted_drivers):
+                drivers_snap[abbr] = {
+                    "position": pos + 1,
+                    "points": data["points"],
+                    "fullName": data["fullName"],
+                    "teamColor": data["teamColor"],
+                }
+
+            rounds.append({"round": rn, "name": short_name, "drivers": drivers_snap})
+
+        return rounds
+
+    try:
+        return await run_blocking(_compute)
+    except Exception as e:
+        import traceback
+        raise HTTPException(status_code=500, detail=f"{e}\n{traceback.format_exc()}")
+
+
+# ---------------------------------------------------------------------------
+# Historical – Driver stats: championship + race + qualifying progressions
+# ---------------------------------------------------------------------------
+
+@app.get("/driver-stats/{year}")
+async def get_driver_stats(year: int):
+    """
+    Return championship position progression, race finishing positions, and
+    qualifying grid positions for all drivers across completed rounds.
+    Race positions use the main Race only (no Sprint).
+    Qualifying positions use the main Qualifying session only (no Sprint Qualifying/Shootout).
+    """
+    def _compute():
+        schedule = fastf1.get_event_schedule(year, include_testing=False)
+        schedule = schedule.sort_values("RoundNumber")
+
+        dates = schedule["EventDate"].copy()
+        if hasattr(dates.dt, "tz") and dates.dt.tz is not None:
+            dates = dates.dt.tz_localize(None)
+        now = pd.Timestamp.now()
+        past = schedule[dates <= now]
+
+        cumulative: dict = {}
+        championship_rounds, race_rounds, quali_rounds = [], [], []
+        sprint_rounds, sprint_quali_rounds = [], []
+
+        for _, event in past.iterrows():
+            rn = int(event["RoundNumber"])
+            short_name = str(event.get("EventName", f"Round {rn}")).replace(" Grand Prix", "").strip()
+
+            round_has_points = False
+            race_drivers: dict = {}
+            quali_drivers: dict = {}
+            sprint_drivers: dict = {}
+            sprint_quali_drivers: dict = {}
+
+            for i in range(1, 6):
+                sess_name = event.get(f"Session{i}", "")
+                if not sess_name or str(sess_name) in ("", "None", "nan"):
+                    continue
+                n = str(sess_name).strip().lower()
+
+                is_main_race   = (n == "race")
+                is_sprint      = (n == "sprint")
+                is_main_quali  = (n == "qualifying")
+                is_sprint_quali = ("sprint" in n and "qualifying" in n) or "shootout" in n
+
+                if not (is_main_race or is_sprint or is_main_quali or is_sprint_quali):
+                    continue
+
+                try:
+                    s = fastf1.get_session(year, rn, str(sess_name))
+                    s.load(telemetry=False, weather=False, messages=False, laps=False)
+                    if s.results is None or s.results.empty:
+                        continue
+
+                    for _, r in s.results.iterrows():
+                        abbr = str(r.get("Abbreviation", ""))
+                        if not abbr:
+                            continue
+                        full_name = str(r.get("FullName", ""))
+                        team_color = f"#{r.get('TeamColor', 'ffffff')}"
+
+                        # Championship: accumulate points from Race + Sprint
+                        if is_main_race or is_sprint:
+                            pts = float(r["Points"]) if pd.notna(r.get("Points")) else 0
+                            if abbr not in cumulative:
+                                cumulative[abbr] = {"points": 0, "fullName": full_name, "teamColor": team_color}
+                            cumulative[abbr]["points"] += pts
+                            round_has_points = True
+
+                        # Race finishing position (classified only)
+                        if is_main_race:
+                            try:
+                                pos = int(str(r.get("ClassifiedPosition", "")).strip())
+                                race_drivers[abbr] = {"position": pos, "fullName": full_name, "teamColor": team_color}
+                            except (TypeError, ValueError):
+                                pass
+
+                        # Sprint finishing position (classified only)
+                        if is_sprint:
+                            try:
+                                pos = int(str(r.get("ClassifiedPosition", "")).strip())
+                                sprint_drivers[abbr] = {"position": pos, "fullName": full_name, "teamColor": team_color}
+                            except (TypeError, ValueError):
+                                pass
+
+                        # Main qualifying grid position
+                        if is_main_quali:
+                            try:
+                                pos = int(float(str(r.get("Position", "")).strip()))
+                                quali_drivers[abbr] = {"position": pos, "fullName": full_name, "teamColor": team_color}
+                            except (TypeError, ValueError):
+                                pass
+
+                        # Sprint qualifying / shootout position
+                        if is_sprint_quali:
+                            try:
+                                pos = int(float(str(r.get("Position", "")).strip()))
+                                sprint_quali_drivers[abbr] = {"position": pos, "fullName": full_name, "teamColor": team_color}
+                            except (TypeError, ValueError):
+                                pass
+
+                except Exception:
+                    continue
+
+            if round_has_points:
+                sorted_drivers = sorted(cumulative.items(), key=lambda x: x[1]["points"], reverse=True)
+                snap = {
+                    abbr: {
+                        "position": pos + 1,
+                        "points": data["points"],
+                        "fullName": data["fullName"],
+                        "teamColor": data["teamColor"],
+                    }
+                    for pos, (abbr, data) in enumerate(sorted_drivers)
+                }
+                championship_rounds.append({"round": rn, "name": short_name, "drivers": snap})
+
+            if race_drivers:
+                race_rounds.append({"round": rn, "name": short_name, "drivers": race_drivers})
+
+            if quali_drivers:
+                quali_rounds.append({"round": rn, "name": short_name, "drivers": quali_drivers})
+
+            if sprint_drivers:
+                sprint_rounds.append({"round": rn, "name": short_name, "drivers": sprint_drivers})
+
+            if sprint_quali_drivers:
+                sprint_quali_rounds.append({"round": rn, "name": short_name, "drivers": sprint_quali_drivers})
+
+        return {
+            "championship": championship_rounds,
+            "race": race_rounds,
+            "qualifying": quali_rounds,
+            "sprint": sprint_rounds,
+            "sprint_quali": sprint_quali_rounds,
+        }
+
+    try:
+        return await run_blocking(_compute)
+    except Exception as e:
+        import traceback
+        raise HTTPException(status_code=500, detail=f"{e}\n{traceback.format_exc()}")
+
+
+# ---------------------------------------------------------------------------
 # Historical – Driver list for a session
 # ---------------------------------------------------------------------------
 
 @app.get("/drivers/{year}/{round_number}/{session_type}")
-async def get_drivers(year: int, round_number: int, session_type: str):
+async def get_drivers(year: int, round_number: int, session_type: str, event_date: Optional[str] = None):
     """Return the list of drivers that participated in a session."""
+    def _load():
+        schedule = fastf1.get_event_schedule(year, include_testing=False)
+        real_round = _resolve_round(schedule, round_number, event_date)
+        return load_session(year, real_round, session_type)
+
     try:
-        session = await run_blocking(load_session, year, round_number, session_type)
+        session = await run_blocking(_load)
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
 
@@ -510,6 +750,80 @@ async def get_drivers(year: int, round_number: int, session_type: str):
             "number": info.get("DriverNumber", driver_id),
         })
     return results
+
+
+# ---------------------------------------------------------------------------
+# Schedule – Next upcoming session
+# ---------------------------------------------------------------------------
+
+@app.get("/next-event/{year}")
+async def get_next_event(year: int):
+    """
+    Return the next upcoming session (Sprint Qualifying, Sprint, Qualifying, or Race)
+    in the given season. Returns {"next": null} when the season is over.
+    """
+    TARGET = {"race", "sprint", "qualifying", "sprint qualifying", "sprint shootout"}
+    LABEL = {
+        "race": "Race",
+        "sprint": "Sprint Race",
+        "qualifying": "Qualifying",
+        "sprint qualifying": "Sprint Qualy",
+        "sprint shootout": "Sprint Qualy",
+    }
+
+    def _compute():
+        schedule = fastf1.get_event_schedule(year, include_testing=False)
+        schedule = schedule.sort_values("RoundNumber")
+        now = pd.Timestamp.now(tz="UTC")
+        best = None
+
+        for _, event in schedule.iterrows():
+            rn = int(event["RoundNumber"])
+            short_name = str(event.get("EventName", f"Round {rn}")).replace(" Grand Prix", "").strip()
+            country = str(event.get("Country", ""))
+            location = str(event.get("Location", ""))
+            event_date = event.get("EventDate")
+            event_date_str = event_date.isoformat() if event_date is not None and not pd.isna(event_date) else None
+
+            for i in range(1, 6):
+                sess_name = event.get(f"Session{i}", "")
+                sess_date = event.get(f"Session{i}Date")
+
+                if not sess_name or str(sess_name) in ("", "None", "nan"):
+                    continue
+                if sess_date is None or pd.isna(sess_date):
+                    continue
+
+                n = str(sess_name).strip().lower()
+                if n not in TARGET:
+                    continue
+
+                if sess_date.tzinfo is None:
+                    sess_date = sess_date.tz_localize("UTC")
+
+                if sess_date <= now:
+                    continue
+
+                candidate = {
+                    "round": rn,
+                    "name": short_name,
+                    "country": country,
+                    "location": location,
+                    "session": LABEL.get(n, str(sess_name)),
+                    "datetime": sess_date.isoformat(),
+                    "eventDate": event_date_str,
+                }
+                if best is None or sess_date < pd.Timestamp(best["datetime"]):
+                    best = candidate
+
+        return best
+
+    try:
+        result = await run_blocking(_compute)
+        return {"next": result}
+    except Exception as e:
+        import traceback
+        raise HTTPException(status_code=500, detail=f"{e}\n{traceback.format_exc()}")
 
 
 # ---------------------------------------------------------------------------

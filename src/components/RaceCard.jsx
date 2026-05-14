@@ -50,9 +50,9 @@ function CardContent({ race, year }) {
 export default function RaceCard({ race, year }) {
   const { round, status } = race
 
-  if (status === 'cancelled') {
+  if (status === 'cancelled' || status === 'upcoming') {
     return (
-      <div className="race-card cancelled">
+      <div className={`race-card ${status}`}>
         <CardContent race={race} year={year} />
       </div>
     )
