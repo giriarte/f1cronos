@@ -3,7 +3,14 @@
     "allow": [
       "Bash(npx vite *)",
       "PowerShell(Get-ChildItem \"c:\\\\Users\\\\tito_\\\\workplace\\\\f1cronos\\\\backend\\\\venv\\\\Lib\\\\site-packages\" | Select-Object Name | Where-Object { $_.Name -match \"fast\" })",
-      "PowerShell(& \"c:\\\\Users\\\\tito_\\\\workplace\\\\f1cronos\\\\backend\\\\venv\\\\Scripts\\\\python.exe\" -c \"import fastf1; print\\(fastf1.__version__\\)\")"
+      "PowerShell(& \"c:\\\\Users\\\\tito_\\\\workplace\\\\f1cronos\\\\backend\\\\venv\\\\Scripts\\\\python.exe\" -c \"import fastf1; print\\(fastf1.__version__\\)\")",
+      "Bash(Get-ChildItem -Path \"c:\\\\Users\\\\tito_\\\\workplace\\\\f1cronos\" -Recurse -Directory -Depth 3)",
+      "Bash(Sort-Object)",
+      "PowerShell(Get-ChildItem -Path \"c:\\\\Users\\\\tito_\\\\workplace\\\\f1cronos\" -Depth 1 | Where-Object { $_.PSIsContainer } | Select-Object -ExpandProperty Name)",
+      "PowerShell(Get-ChildItem -Path \"c:\\\\Users\\\\tito_\\\\workplace\\\\f1cronos\" | Where-Object { -not $_.PSIsContainer } | Select-Object Name)",
+      "PowerShell(Head -20)",
+      "Bash(python -c \"import ast, sys; ast.parse\\(open\\('backend/main.py'\\).read\\(\\)\\); print\\('syntax OK'\\)\")",
+      "Bash(python -c \"import ast; ast.parse\\(open\\('backend/main.py'\\).read\\(\\)\\); print\\('backend OK'\\)\")"
     ]
   }
 }

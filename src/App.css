@@ -16,6 +16,10 @@
   z-index: 10;
 }
 
+.topbar-logo-link {
+  text-decoration: none;
+}
+
 .topbar-logo {
   font-size: 18px;
   font-weight: 700;
@@ -25,6 +29,39 @@
 
 .topbar-logo-accent {
   color: var(--red);
+}
+
+.topbar-nav {
+  display: flex;
+  align-items: center;
+  margin-left: 24px;
+  gap: 4px;
+}
+
+.topbar-nav-link {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 6px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-decoration: none;
+  transition: background 0.15s, color 0.15s;
+}
+
+.topbar-nav-link:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+}
+
+.topbar-live-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: #e10600;
+  flex-shrink: 0;
 }
 
 .app-body {
