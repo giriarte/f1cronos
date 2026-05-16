@@ -13,6 +13,7 @@ const SECTOR_COLORS = {
   red:    '#9d9b9b',
 }
 
+
 const COMPOUND_META = {
   SOFT:         { letter: 'S', color: '#e8002d' },
   MEDIUM:       { letter: 'M', color: '#FFF200' },
@@ -29,6 +30,16 @@ const SEGMENT_CUTOFFS = {
 }
 
 // ─── Small reusable components ────────────────────────────────────────────────
+
+function TrackStatusBadge({ status }) {
+  const map = {
+    TRACK:  ['TRACK',   'ts-track'],
+    PITOUT: ['OUTLAP',  'ts-pitout'],
+    PIT:    ['PIT',     'ts-pit'],
+  }
+  const [label, cls] = map[status] ?? ['—', 'ts-pit']
+  return <span className={`track-status ${cls}`}>{label}</span>
+}
 
 function CompoundBadge({ compound, age }) {
   if (!compound) return <span className="compound-empty">—</span>
@@ -47,36 +58,35 @@ const NO_BARS = [false, false, false]
 
 const NO_BAR_COLORS = [null, null, null]
 
-function MicroSectors({ s1, s2, s3, s1Color, s2Color, s3Color, s1Bars, s2Bars, s3Bars, s1BarColors, s2BarColors, s3BarColors, inProgress }) {
+function MicroSectors({ s1, s2, s3, s1Color, s2Color, s3Color, s1Bars, s2Bars, s3Bars, s1BarColors, s2BarColors, s3BarColors, bestS1, bestS2, bestS3, inProgress }) {
   const sectors = [
-    { key: 's1', time: s1, color: s1Color, bars: s1Bars ?? NO_BARS, barColors: s1BarColors ?? NO_BAR_COLORS },
-    { key: 's2', time: s2, color: s2Color, bars: s2Bars ?? NO_BARS, barColors: s2BarColors ?? NO_BAR_COLORS },
-    { key: 's3', time: s3, color: s3Color, bars: s3Bars ?? NO_BARS, barColors: s3BarColors ?? NO_BAR_COLORS },
+    { key: 's1', time: s1, color: s1Color, bars: s1Bars ?? NO_BARS, barColors: s1BarColors ?? NO_BAR_COLORS, best: bestS1 },
+    { key: 's2', time: s2, color: s2Color, bars: s2Bars ?? NO_BARS, barColors: s2BarColors ?? NO_BAR_COLORS, best: bestS2 },
+    { key: 's3', time: s3, color: s3Color, bars: s3Bars ?? NO_BARS, barColors: s3BarColors ?? NO_BAR_COLORS, best: bestS3 },
   ]
 
   return (
     <div className="micro-sectors">
-      {sectors.map(({ key, time, color, bars, barColors }) => {
+      {sectors.map(({ key, time, color, bars, barColors, best }) => {
         const sectorDone = time !== null
         const anyBarDone = bars.some(Boolean)
         const sectorHex  = sectorDone ? (SECTOR_COLORS[color] ?? '#555') : '#444'
         const timeColor  = sectorDone ? sectorHex : (anyBarDone ? '#707070' : '#444')
-        const timeLabel  = time != null ? time.toFixed(3) : (anyBarDone ? '···' : '—')
+        const isWatermark = !sectorDone && best != null
+        const timeLabel  = sectorDone ? time.toFixed(3) : (isWatermark ? best.toFixed(3) : (anyBarDone ? '···' : '—'))
 
         return (
           <div key={key} className="micro-sector">
-            <span className="micro-time" style={{ color: timeColor }}>{timeLabel}</span>
+            <span className={`micro-time${isWatermark ? ' micro-watermark' : ''}`} style={isWatermark ? undefined : { color: timeColor }}>{timeLabel}</span>
             <div className="micro-bars">
               {bars.map((done, i) => {
-                // done + sector complete  → individual bar color (or sector fallback)
-                // done + sector in progress → neutral (partial progress indicator)
-                // not done + driver on lap → dark pulsing
-                // not done + no lap       → static dark
-                const barHex = barColors[i] ? (SECTOR_COLORS[barColors[i]] ?? sectorHex) : sectorHex
+                // Show individual bar color as soon as available (no need to wait for full sector)
+                const barColorHex = barColors[i] ? (SECTOR_COLORS[barColors[i]] ?? '#555') : null
                 let bg
-                if (done && sectorDone)  bg = barHex
-                else if (done)           bg = '#a0a0a0'
-                else                     bg = '#282828'
+                if (done && barColorHex)     bg = barColorHex
+                else if (done && sectorDone) bg = sectorHex
+                else if (done)               bg = '#a0a0a0'
+                else                         bg = '#282828'
                 const isPending = inProgress && !done
                 return (
                   <span
@@ -116,7 +126,7 @@ function TimingTable({ drivers, segment }) {
     if (afterCutoff) {
       rows.push(
         <tr key="cutoff-line" className="cutoff-row">
-          <td colSpan={8}>
+          <td colSpan={10}>
             <span className="cutoff-label">KNOCKOUT LINE</span>
           </td>
         </tr>
@@ -145,14 +155,19 @@ function TimingTable({ drivers, segment }) {
           <span className="driver-name">{d.fullName}</span>
         </td>
         <td className="lt-laptime mono">{d.bestLapStr ?? '—'}</td>
+        <td className="lt-lastlap mono">{d.lastLapStr ?? '—'}</td>
         <td className="lt-sectors">
           <MicroSectors
             s1={d.s1} s2={d.s2} s3={d.s3}
             s1Color={d.s1Color} s2Color={d.s2Color} s3Color={d.s3Color}
             s1Bars={d.s1Bars} s2Bars={d.s2Bars} s3Bars={d.s3Bars}
             s1BarColors={d.s1BarColors} s2BarColors={d.s2BarColors} s3BarColors={d.s3BarColors}
+            bestS1={d.bestS1} bestS2={d.bestS2} bestS3={d.bestS3}
             inProgress={d.inProgress}
           />
+        </td>
+        <td className="lt-status">
+          <TrackStatusBadge status={d.trackStatus} />
         </td>
         <td className="lt-tire">
           <CompoundBadge compound={d.compound} age={d.tireAge} />
@@ -174,7 +189,9 @@ function TimingTable({ drivers, segment }) {
             <th className="lt-team" />
             <th className="lt-driver">Driver</th>
             <th className="lt-laptime">Best Lap</th>
+            <th className="lt-lastlap">Last Lap</th>
             <th className="lt-sectors">S1 &nbsp; S2 &nbsp; S3</th>
+            <th className="lt-status">Status</th>
             <th className="lt-tire">Tire</th>
             <th className="lt-gap">Gap</th>
           </tr>
@@ -314,7 +331,7 @@ export default function LiveTimingPage() {
         <div className="live-header-center">
           <span className="live-session-label">
             {sessionInfo
-              ? `${sessionInfo.year} · Rd ${sessionInfo.round} · ${sessionInfo.sessionName}`
+              ? `${sessionInfo.year} · Rd ${sessionInfo.round} · ${sessionInfo.raceName} · ${sessionInfo.sessionName}`
               : 'Loading session…'}
           </span>
           <StatusBadge status={status} />

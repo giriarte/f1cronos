@@ -8,6 +8,7 @@ export function useWebSocket() {
   const [sessionInfo, setSessionInfo] = useState(null)
   const [currentSegment, setCurrentSegment] = useState(null)
   const [segmentData, setSegmentData] = useState({})
+  const [sessionTime, setSessionTime] = useState(null)
   const [error, setError] = useState(null)
   const wsRef = useRef(null)
   const closingRef = useRef(false)

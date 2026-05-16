@@ -10,7 +10,8 @@
       "PowerShell(Get-ChildItem -Path \"c:\\\\Users\\\\tito_\\\\workplace\\\\f1cronos\" | Where-Object { -not $_.PSIsContainer } | Select-Object Name)",
       "PowerShell(Head -20)",
       "Bash(python -c \"import ast, sys; ast.parse\\(open\\('backend/main.py'\\).read\\(\\)\\); print\\('syntax OK'\\)\")",
-      "Bash(python -c \"import ast; ast.parse\\(open\\('backend/main.py'\\).read\\(\\)\\); print\\('backend OK'\\)\")"
+      "Bash(python -c \"import ast; ast.parse\\(open\\('backend/main.py'\\).read\\(\\)\\); print\\('backend OK'\\)\")",
+      "WebFetch(domain:f1cosmos.com)"
     ]
   }
 }

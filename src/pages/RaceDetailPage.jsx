@@ -53,17 +53,23 @@ function sessionType(name) {
 
 function DriverCard({ r, driverSectors, isQuali, isRace, detailsTo, detailsState }) {
   const pos = r.classifiedPosition || r.position || '—'
+  const delta = isRace ? posDelta(r) : null
+  const deltaLabel = delta == null ? null : delta > 0 ? `▲${delta}` : delta < 0 ? `▼${Math.abs(delta)}` : null
+  const deltaCls   = delta > 0 ? 'pos-gain' : delta < 0 ? 'pos-loss' : 'pos-same'
   return (
     <div className="driver-card">
       <div className="card-header">
         <span className="card-pos">{pos}</span>
+        {isRace && deltaLabel && (
+          <span className={`card-delta ${deltaCls}`}>{deltaLabel}</span>
+        )}
         <span className="card-team-bar" style={{ background: r.teamColor }} />
         <div className="card-driver-info">
           <span className="card-abbr">{r.abbreviation}</span>
           <span className="card-name">{r.fullName}</span>
         </div>
         {isRace && r.points > 0 && (
-          <span className="card-pts">{r.points} pts</span>
+          <span className="pts-pill">{r.points} pts</span>
         )}
       </div>
 
@@ -100,9 +106,9 @@ function DriverCard({ r, driverSectors, isQuali, isRace, detailsTo, detailsState
         <div className="card-result-row">
           <span className="card-time">{r.time ?? '—'}</span>
           {isRace && <span className="card-grid">Grid {r.gridPosition ?? '—'}</span>}
-          <span className="card-status">{r.status}</span>
+          <StatusBadge status={r.status} />
           {isRace && detailsTo && (
-            <Link to={detailsTo} state={detailsState} className="card-details-btn">Details</Link>
+            <Link to={detailsTo} state={detailsState} className="card-details-btn">Laps</Link>
           )}
         </div>
       )}
@@ -134,10 +140,25 @@ function MobileResults({ results, session, sectors, year, round, race }) {
   )
 }
 
+function posDelta(r) {
+  const finish = parseInt(r.classifiedPosition, 10)
+  const grid   = parseInt(r.gridPosition, 10)
+  if (isNaN(finish) || isNaN(grid) || grid <= 0) return null
+  return grid - finish  // positive = gained positions
+}
+
+function StatusBadge({ status }) {
+  if (!status || status === 'Finished') return null
+  const isLapped = /^\+\d+ Lap/.test(status)
+  const isDns    = status === 'DNS' || status === 'Withdrawn'
+  const cls      = isDns ? 'status-dns' : isLapped ? 'status-lapped' : 'status-dnf'
+  return <span className={`race-status-badge ${cls}`}>{status}</span>
+}
+
 function ResultsTable({ results, session, sectors, year, round, race }) {
   const type = sessionType(session)
   const isQuali = type === 'qualifying'
-  const isRace = type === 'race' || type === 'sprint'
+  const isRace  = type === 'race' || type === 'sprint'
   const driverColorMap = isRace
     ? Object.fromEntries(results.map(r => [r.abbreviation, r.teamColor]))
     : {}
@@ -148,25 +169,31 @@ function ResultsTable({ results, session, sectors, year, round, race }) {
         <thead>
           <tr>
             <th className="col-pos">POS</th>
+            {isRace && <th className="col-delta">△</th>}
             <th className="col-no">NO</th>
-            <th className="col-team-icon"></th>
+            <th className="col-team-icon" />
             <th className="col-driver">Driver</th>
+            {isRace && <th className="col-team-name">Team</th>}
             {isQuali && <th className="col-q">Q1</th>}
             {isQuali && <th className="col-q">Q2</th>}
             {isQuali && <th className="col-q">Q3</th>}
             {!isQuali && <th className="col-time">Time / Gap</th>}
-            {isRace && <th className="col-details"></th>}
             {isRace && <th className="col-grid">Grid</th>}
             {isRace && <th className="col-pts">PTS</th>}
             {!isQuali && <th className="col-status">Status</th>}
+            {isRace && <th className="col-details" />}
           </tr>
         </thead>
         <tbody>
           {results.map((r, i) => {
             const driverSectors = sectors[r.abbreviation]
+            const delta = isRace ? posDelta(r) : null
+            const deltaLabel = delta == null ? '—' : delta > 0 ? `▲${delta}` : delta < 0 ? `▼${Math.abs(delta)}` : '—'
+            const deltaCls   = delta > 0 ? 'pos-gain' : delta < 0 ? 'pos-loss' : 'pos-same'
             return (
               <tr key={r.driverNumber} className={i % 2 === 0 ? 'row-even' : ''}>
                 <td className="col-pos">{r.classifiedPosition || r.position || '—'}</td>
+                {isRace && <td className={`col-delta ${deltaCls}`}>{deltaLabel}</td>}
                 <td className="col-no">{r.driverNumber}</td>
                 <td className="col-team-icon">
                   <span className="team-bar" style={{ background: r.teamColor }} />
@@ -175,10 +202,22 @@ function ResultsTable({ results, session, sectors, year, round, race }) {
                   <span className="driver-abbr">{r.abbreviation}</span>
                   <span className="driver-name">{r.fullName}</span>
                 </td>
+                {isRace && <td className="col-team-name">{r.teamName}</td>}
                 {isQuali && <QCell lapTime={r.q1} seg={driverSectors?.q1} />}
                 {isQuali && <QCell lapTime={r.q2} seg={driverSectors?.q2} />}
                 {isQuali && <QCell lapTime={r.q3} seg={driverSectors?.q3} />}
                 {!isQuali && <td className="col-time mono">{r.time ?? '—'}</td>}
+                {isRace && <td className="col-grid">{r.gridPosition ?? '—'}</td>}
+                {isRace && (
+                  <td className="col-pts">
+                    {r.points > 0 && <span className="pts-pill">{r.points}</span>}
+                  </td>
+                )}
+                {!isQuali && (
+                  <td className="col-status">
+                    <StatusBadge status={r.status} />
+                  </td>
+                )}
                 {isRace && (
                   <td className="col-details">
                     <Link
@@ -186,13 +225,10 @@ function ResultsTable({ results, session, sectors, year, round, race }) {
                       state={{ race, initialDriver: r.abbreviation, sessionName: session, driverColorMap }}
                       className="details-btn"
                     >
-                      Details
+                      Laps
                     </Link>
                   </td>
                 )}
-                {isRace && <td className="col-grid">{r.gridPosition ?? '—'}</td>}
-                {isRace && <td className="col-pts">{r.points > 0 ? r.points : ''}</td>}
-                {!isQuali && <td className="col-status">{r.status}</td>}
               </tr>
             )
           })}

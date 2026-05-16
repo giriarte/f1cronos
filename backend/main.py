@@ -1,5 +1,6 @@
 import asyncio
 import json
+import random
 import threading
 from contextlib import asynccontextmanager
 from typing import Optional
@@ -935,7 +936,7 @@ async def live_timing_replay(
 
     # Filter valid timed laps
     desired_cols = ["Driver", "LapTime", "Sector1Time", "Sector2Time", "Sector3Time",
-                    "LapStartTime", "Compound", "TyreLife"]
+                    "LapStartTime", "Compound", "TyreLife", "PitOutTime"]
     available_cols = [c for c in desired_cols if c in laps.columns]
     timed = laps[laps["LapTime"].notna()][available_cols].copy()
 
@@ -982,8 +983,23 @@ async def live_timing_replay(
     _F = [False, False, False]  # shorthand for all-bars-off
     _T = [True, True, True]     # shorthand for all-bars-on
 
+    def _mini_split(total: float, seed: int) -> tuple[float, float, float]:
+        """Split a sector time into 3 unequal mini-bar times that sum to total.
+        Deterministic per (driver, lap, sector) so replay is reproducible."""
+        rng = random.Random(seed)
+        a = 1/3 + rng.uniform(-0.07, 0.07)
+        b = 1/3 + rng.uniform(-0.07, 0.07)
+        a = max(0.15, min(0.55, a))
+        b = max(0.15, min(0.55, b))
+        c = max(0.10, 1.0 - a - b)
+        s = a + b + c
+        m1 = round(total * a / s, 3)
+        m2 = round(total * b / s, 3)
+        m3 = round(total - m1 - m2, 3)
+        return m1, m2, m3
+
     events_list: list[dict] = []
-    for _, row in timed.iterrows():
+    for lap_idx, (_, row) in enumerate(timed.iterrows()):
         abbr = str(row["Driver"])
         seg = str(row["Segment"])
         lap_start = _td_sec(row.get("LapStartTime"))
@@ -999,27 +1015,44 @@ async def live_timing_replay(
         compound = str(compound_raw) if pd.notna(compound_raw) else "UNKNOWN"
         tire_age_raw = row.get("TyreLife", 0)
         tire_age = int(tire_age_raw) if pd.notna(tire_age_raw) else 0
+        is_pit_out = _td_sec(row.get("PitOutTime")) is not None
+
+        s1m1, s1m2, s1m3 = _mini_split(s1, hash((abbr, lap_idx, 1))) if s1 is not None else (None, None, None)
+        s2m1, s2m2, s2m3 = _mini_split(s2, hash((abbr, lap_idx, 2))) if s2 is not None else (None, None, None)
+        s3m1, s3m2, s3m3 = _mini_split(s3, hash((abbr, lap_idx, 3))) if s3 is not None else (None, None, None)
+
         base = {"abbr": abbr, "seg": seg, "compound": compound, "tireAge": tire_age,
-                "s1": s1, "s2": s2, "s3": s3}
+                "s1": s1, "s2": s2, "s3": s3,
+                "s1m1": s1m1, "s1m2": s1m2, "s1m3": s1m3,
+                "s2m1": s2m1, "s2m2": s2m2, "s2m3": s2m3,
+                "s3m1": s3m1, "s3m2": s3m2, "s3m3": s3m3,
+                "isPitOut": is_pit_out}
 
         if s1 is not None:
-            events_list.append({**base, "sessionTime": lap_start + s1 / 3,     "ev": "s1m1"})
-            events_list.append({**base, "sessionTime": lap_start + s1 * 2 / 3, "ev": "s1m2"})
-            events_list.append({**base, "sessionTime": lap_start + s1,         "ev": "s1"})
+            events_list.append({**base, "sessionTime": lap_start + s1m1,         "ev": "s1m1"})
+            events_list.append({**base, "sessionTime": lap_start + s1m1 + s1m2,  "ev": "s1m2"})
+            events_list.append({**base, "sessionTime": lap_start + s1,            "ev": "s1"})
 
             if s2 is not None:
-                events_list.append({**base, "sessionTime": lap_start + s1 + s2 / 3,     "ev": "s2m1"})
-                events_list.append({**base, "sessionTime": lap_start + s1 + s2 * 2 / 3, "ev": "s2m2"})
-                events_list.append({**base, "sessionTime": lap_start + s1 + s2,         "ev": "s2"})
+                events_list.append({**base, "sessionTime": lap_start + s1 + s2m1,        "ev": "s2m1"})
+                events_list.append({**base, "sessionTime": lap_start + s1 + s2m1 + s2m2, "ev": "s2m2"})
+                events_list.append({**base, "sessionTime": lap_start + s1 + s2,           "ev": "s2"})
 
                 if lap_sec is not None:
                     if s3 is not None:
-                        events_list.append({**base, "sessionTime": lap_start + s1 + s2 + s3 / 3,     "ev": "s3m1"})
-                        events_list.append({**base, "sessionTime": lap_start + s1 + s2 + s3 * 2 / 3, "ev": "s3m2"})
+                        events_list.append({**base, "sessionTime": lap_start + s1 + s2 + s3m1,        "ev": "s3m1"})
+                        events_list.append({**base, "sessionTime": lap_start + s1 + s2 + s3m1 + s3m2, "ev": "s3m2"})
                     events_list.append({**base, "sessionTime": lap_start + lap_sec,
                                         "ev": "full", "lapSec": lap_sec})
 
     events_list.sort(key=lambda e: e["sessionTime"])
+
+    # Last event time per segment — used by the frontend countdown timer
+    segment_end_times: dict = {}
+    for ev in events_list:
+        s, t = ev["seg"], ev["sessionTime"]
+        if s not in segment_end_times or t > segment_end_times[s]:
+            segment_end_times[s] = round(t, 1)
 
     # Send session metadata to client
     try:
@@ -1030,27 +1063,46 @@ async def live_timing_replay(
             "sessionName": session_name,
             "sessionType": session_type,
             "segments": segment_names,
+            "segmentEndTimes": segment_end_times,
+            "raceName": str(v) if pd.notna(v := session.event.get("EventName", "")) else "",
+            "country":  str(v) if pd.notna(v := session.event.get("Country",    "")) else "",
+            "location": str(v) if pd.notna(v := session.event.get("Location",   "")) else "",
         }))
     except WebSocketDisconnect:
         return
 
     # best[seg][abbr] – best complete lap per driver per segment
     best: dict = {seg: {} for seg in segment_names}
+    # last_lap[seg][abbr] – most recently completed lap time per driver per segment
+    last_lap: dict = {seg: {} for seg in segment_names}
     # sector_hist[seg][abbr] – ALL completed sector times per driver: {"s1": [...], "s2": [...], "s3": [...]}
     # Updated at lap completion; used at render time to compute colors dynamically.
     sector_hist: dict = {seg: {} for seg in segment_names}
     # overall_best[seg] – fastest sector time seen across ALL drivers in the segment
     overall_best: dict = {seg: {"s1": None, "s2": None, "s3": None} for seg in segment_names}
+    # mini_hist[seg][abbr][key] – completed mini-bar times per driver per segment
+    # keys: s1m1, s1m2, s1m3, s2m1, s2m2, s2m3, s3m1, s3m2, s3m3
+    _MINI_KEYS = ["s1m1","s1m2","s1m3","s2m1","s2m2","s2m3","s3m1","s3m2","s3m3"]
+    mini_hist: dict = {seg: {} for seg in segment_names}
+    mini_overall: dict = {seg: {k: None for k in _MINI_KEYS} for seg in segment_names}
     # current_lap[abbr] – live in-progress state per driver (cleared on segment change)
-    # Stores only timing/bar state; colors are computed at render time, never stored.
+    # Stores timing/bar state + mini-bar times; colors computed at render time.
     current_lap: dict = {}
     current_seg = segment_names[0]
     prev_time: float | None = None
+
+    def _upd_mini(seg: str, abbr: str, key: str, val: float) -> None:
+        mini_hist[seg].setdefault(abbr, {}).setdefault(key, []).append(val)
+        if mini_overall[seg][key] is None or val < mini_overall[seg][key]:
+            mini_overall[seg][key] = val
 
     def _ensure(a: str, cpd: str, age: int) -> None:
         if a not in current_lap:
             current_lap[a] = {
                 "s1": None, "s2": None, "s3": None,
+                "s1m1": None, "s1m2": None, "s1m3": None,
+                "s2m1": None, "s2m2": None, "s2m3": None,
+                "s3m1": None, "s3m2": None, "s3m3": None,
                 "s1Bars": list(_F), "s2Bars": list(_F), "s3Bars": list(_F),
                 "compound": cpd, "tireAge": age, "inProgress": True,
             }
@@ -1068,9 +1120,24 @@ async def live_timing_replay(
             hist = sector_hist[seg].get(a, {}).get(key, [])
             if not hist or val <= min(hist):
                 return "green"
-            if len(hist) >= 3 and val >= max(hist):
-                return "grey"
             return "yellow"
+
+        def _render_m_color(a: str, val: float, key: str) -> str:
+            ob = mini_overall[seg][key]
+            if ob is None or val <= ob:
+                return "purple"
+            hist = mini_hist[seg].get(a, {}).get(key, [])
+            if not hist or val <= min(hist):
+                return "green"
+            return "yellow"
+
+        def _bc(a: str, src: dict, k1: str, k2: str, k3: str) -> list:
+            v1, v2, v3 = src.get(k1), src.get(k2), src.get(k3)
+            return [
+                _render_m_color(a, v1, k1) if v1 is not None else None,
+                _render_m_color(a, v2, k2) if v2 is not None else None,
+                _render_m_color(a, v3, k3) if v3 is not None else None,
+            ]
 
         def _disp(a):
             cur = current_lap.get(a)
@@ -1080,7 +1147,7 @@ async def live_timing_replay(
                         cur.get("s1Bars", list(_F)), cur.get("s2Bars", list(_F)), cur.get("s3Bars", list(_F)),
                         cur.get("inProgress", False))
             if bl is not None:
-                return bl.get("s1"), bl.get("s2"), bl.get("s3"), list(_T), list(_T), list(_T), False
+                return None, None, None, list(_T), list(_T), list(_T), False
             return None, None, None, list(_F), list(_F), list(_F), False
 
         sorted_abbrs = sorted(seg_best, key=lambda a: seg_best[a]["lapTimeSec"])
@@ -1097,11 +1164,18 @@ async def live_timing_replay(
             s1c = _render_s_color(a, ds1, "s1") if ds1 is not None else None
             s2c = _render_s_color(a, ds2, "s2") if ds2 is not None else None
             s3c = _render_s_color(a, ds3, "s3") if ds3 is not None else None
-            # Bar colors within a sector equal the sector color (simulation only has sector-level times).
-            # With real independently-measured mini-sector times each bar would differ.
-            s1bc = [s1c, s1c, s1c] if s1c is not None else [None, None, None]
-            s2bc = [s2c, s2c, s2c] if s2c is not None else [None, None, None]
-            s3bc = [s3c, s3c, s3c] if s3c is not None else [None, None, None]
+            src = cur or bl or {}
+            s1bc = _bc(a, src, "s1m1", "s1m2", "s1m3")
+            s2bc = _bc(a, src, "s2m1", "s2m2", "s2m3")
+            s3bc = _bc(a, src, "s3m1", "s3m2", "s3m3")
+            sh = sector_hist[seg].get(a, {})
+            best_s1 = min(sh["s1"]) if sh.get("s1") else None
+            best_s2 = min(sh["s2"]) if sh.get("s2") else None
+            best_s3 = min(sh["s3"]) if sh.get("s3") else None
+            if cur and in_prog:
+                track_status = "PITOUT" if cur.get("isPitOut") else "TRACK"
+            else:
+                track_status = "PIT"
             return {
                 "position":     pos + 1 if pos is not None else None,
                 "abbreviation": a,
@@ -1114,6 +1188,9 @@ async def live_timing_replay(
                 "s1": round(ds1, 3) if ds1 is not None else None,
                 "s2": round(ds2, 3) if ds2 is not None else None,
                 "s3": round(ds3, 3) if ds3 is not None else None,
+                "bestS1": round(best_s1, 3) if best_s1 is not None else None,
+                "bestS2": round(best_s2, 3) if best_s2 is not None else None,
+                "bestS3": round(best_s3, 3) if best_s3 is not None else None,
                 "s1Color": s1c, "s2Color": s2c, "s3Color": s3c,
                 "s1Bars": db1, "s2Bars": db2, "s3Bars": db3,
                 "s1BarColors": s1bc, "s2BarColors": s2bc, "s3BarColors": s3bc,
@@ -1121,8 +1198,11 @@ async def live_timing_replay(
                 "tireAge":      tire_age,
                 "gap":          round(gap, 3) if gap is not None else None,
                 "gapStr":       f"+{gap:.3f}" if gap is not None else None,
-                "inProgress":   in_prog,
-                "justImproved": (just_improved and a == ev_abbr and ev_type == "full"),
+                "inProgress":    in_prog,
+                "trackStatus":   track_status,
+                "lastLapSec":    round(last_lap[seg][a], 3) if a in last_lap[seg] else None,
+                "lastLapStr":    _lapstr(last_lap[seg][a]) if a in last_lap[seg] else None,
+                "justImproved":  (just_improved and a == ev_abbr and ev_type == "full"),
             }
 
         drivers_out = [_driver_row(a, pos, seg_best[a])
@@ -1148,6 +1228,10 @@ async def live_timing_replay(
             compound     = event["compound"]
             tire_age     = event["tireAge"]
             s1, s2, s3   = event["s1"], event["s2"], event["s3"]
+            ev_s1m1, ev_s1m2, ev_s1m3 = event.get("s1m1"), event.get("s1m2"), event.get("s1m3")
+            ev_s2m1, ev_s2m2, ev_s2m3 = event.get("s2m1"), event.get("s2m2"), event.get("s2m3")
+            ev_s3m1, ev_s3m2, ev_s3m3 = event.get("s3m1"), event.get("s3m2"), event.get("s3m3")
+            ev_is_pit_out = event.get("isPitOut", False)
 
             # Pace the replay: sleep proportional to elapsed real time, capped at 90 s
             if prev_time is not None:
@@ -1171,15 +1255,24 @@ async def live_timing_replay(
             just_improved = False
 
             if ev_type == "s1m1":
-                # New lap starting — reset in-progress state for this driver
+                # Bar 1 of sector 1 just completed — record its time immediately
+                if ev_s1m1 is not None:
+                    _upd_mini(seg, abbr, "s1m1", ev_s1m1)
                 current_lap[abbr] = {
                     "s1": None, "s2": None, "s3": None,
+                    "s1m1": ev_s1m1, "s1m2": None, "s1m3": None,
+                    "s2m1": None, "s2m2": None, "s2m3": None,
+                    "s3m1": None, "s3m2": None, "s3m3": None,
                     "s1Bars": [True, False, False],
                     "s2Bars": list(_F), "s3Bars": list(_F),
-                    "compound": compound, "tireAge": tire_age, "inProgress": True,
+                    "compound": compound, "tireAge": tire_age,
+                    "isPitOut": ev_is_pit_out, "inProgress": True,
                 }
             elif ev_type == "s1m2":
                 _ensure(abbr, compound, tire_age)
+                if ev_s1m2 is not None:
+                    _upd_mini(seg, abbr, "s1m2", ev_s1m2)
+                current_lap[abbr]["s1m2"] = ev_s1m2
                 current_lap[abbr]["s1Bars"] = [True, True, False]
             elif ev_type == "s1":
                 _ensure(abbr, compound, tire_age)
@@ -1187,13 +1280,31 @@ async def live_timing_replay(
                     sector_hist[seg].setdefault(abbr, {"s1": [], "s2": [], "s3": []})["s1"].append(s1)
                     if overall_best[seg]["s1"] is None or s1 < overall_best[seg]["s1"]:
                         overall_best[seg]["s1"] = s1
-                current_lap[abbr].update({"s1": s1, "s1Bars": list(_T),
-                                          "s2Bars": list(_F), "compound": compound, "tireAge": tire_age})
+                    m1, m2, m3 = ev_s1m1, ev_s1m2, ev_s1m3
+                    # s1m1 and s1m2 already recorded at their events; only record bar 3 now
+                    if m3 is not None:
+                        _upd_mini(seg, abbr, "s1m3", m3)
+                    current_lap[abbr].update({
+                        "s1": s1, "s1m1": m1, "s1m2": m2, "s1m3": m3,
+                        "s1Bars": list(_T), "s2Bars": list(_F),
+                        "compound": compound, "tireAge": tire_age,
+                    })
+                else:
+                    current_lap[abbr].update({
+                        "s1": s1, "s1Bars": list(_T), "s2Bars": list(_F),
+                        "compound": compound, "tireAge": tire_age,
+                    })
             elif ev_type == "s2m1":
                 _ensure(abbr, compound, tire_age)
+                if ev_s2m1 is not None:
+                    _upd_mini(seg, abbr, "s2m1", ev_s2m1)
+                current_lap[abbr]["s2m1"] = ev_s2m1
                 current_lap[abbr]["s2Bars"] = [True, False, False]
             elif ev_type == "s2m2":
                 _ensure(abbr, compound, tire_age)
+                if ev_s2m2 is not None:
+                    _upd_mini(seg, abbr, "s2m2", ev_s2m2)
+                current_lap[abbr]["s2m2"] = ev_s2m2
                 current_lap[abbr]["s2Bars"] = [True, True, False]
             elif ev_type == "s2":
                 _ensure(abbr, compound, tire_age)
@@ -1201,12 +1312,27 @@ async def live_timing_replay(
                     sector_hist[seg].setdefault(abbr, {"s1": [], "s2": [], "s3": []})["s2"].append(s2)
                     if overall_best[seg]["s2"] is None or s2 < overall_best[seg]["s2"]:
                         overall_best[seg]["s2"] = s2
-                current_lap[abbr].update({"s2": s2, "s2Bars": list(_T), "s3Bars": list(_F)})
+                    m1, m2, m3 = ev_s2m1, ev_s2m2, ev_s2m3
+                    # s2m1 and s2m2 already recorded at their events; only record bar 3 now
+                    if m3 is not None:
+                        _upd_mini(seg, abbr, "s2m3", m3)
+                    current_lap[abbr].update({
+                        "s2": s2, "s2m1": m1, "s2m2": m2, "s2m3": m3,
+                        "s2Bars": list(_T), "s3Bars": list(_F),
+                    })
+                else:
+                    current_lap[abbr].update({"s2": s2, "s2Bars": list(_T), "s3Bars": list(_F)})
             elif ev_type == "s3m1":
                 _ensure(abbr, compound, tire_age)
+                if ev_s3m1 is not None:
+                    _upd_mini(seg, abbr, "s3m1", ev_s3m1)
+                current_lap[abbr]["s3m1"] = ev_s3m1
                 current_lap[abbr]["s3Bars"] = [True, False, False]
             elif ev_type == "s3m2":
                 _ensure(abbr, compound, tire_age)
+                if ev_s3m2 is not None:
+                    _upd_mini(seg, abbr, "s3m2", ev_s3m2)
+                current_lap[abbr]["s3m2"] = ev_s3m2
                 current_lap[abbr]["s3Bars"] = [True, True, False]
             elif ev_type == "full":
                 lap_sec = event["lapSec"]
@@ -1214,8 +1340,21 @@ async def live_timing_replay(
                     sector_hist[seg].setdefault(abbr, {"s1": [], "s2": [], "s3": []})["s3"].append(s3)
                     if overall_best[seg]["s3"] is None or s3 < overall_best[seg]["s3"]:
                         overall_best[seg]["s3"] = s3
+                    # s3m1 and s3m2 already recorded at their events; only record bar 3 now
+                    if ev_s3m3 is not None:
+                        _upd_mini(seg, abbr, "s3m3", ev_s3m3)
+                prev = current_lap.get(abbr, {})
+                s1m1 = prev.get("s1m1") if s1 is not None else None
+                s1m2 = prev.get("s1m2") if s1 is not None else None
+                s1m3 = prev.get("s1m3") if s1 is not None else None
+                s2m1 = prev.get("s2m1") if s2 is not None else None
+                s2m2 = prev.get("s2m2") if s2 is not None else None
+                s2m3 = prev.get("s2m3") if s2 is not None else None
                 current_lap[abbr] = {
                     "s1": s1, "s2": s2, "s3": s3,
+                    "s1m1": s1m1, "s1m2": s1m2, "s1m3": s1m3,
+                    "s2m1": s2m1, "s2m2": s2m2, "s2m3": s2m3,
+                    "s3m1": ev_s3m1, "s3m2": ev_s3m2, "s3m3": ev_s3m3,
                     "s1Bars": list(_T) if s1 is not None else list(_F),
                     "s2Bars": list(_T) if s2 is not None else list(_F),
                     "s3Bars": list(_T) if s3 is not None else list(_F),
@@ -1223,9 +1362,15 @@ async def live_timing_replay(
                 }
                 old_best = best[seg].get(abbr, {}).get("lapTimeSec", float("inf"))
                 if lap_sec < old_best:
-                    best[seg][abbr] = {"lapTimeSec": lap_sec, "s1": s1, "s2": s2, "s3": s3,
-                                       "compound": compound, "tireAge": tire_age}
+                    best[seg][abbr] = {
+                        "lapTimeSec": lap_sec, "s1": s1, "s2": s2, "s3": s3,
+                        "s1m1": s1m1, "s1m2": s1m2, "s1m3": s1m3,
+                        "s2m1": s2m1, "s2m2": s2m2, "s2m3": s2m3,
+                        "s3m1": ev_s3m1, "s3m2": ev_s3m2, "s3m3": ev_s3m3,
+                        "compound": compound, "tireAge": tire_age,
+                    }
                     just_improved = True
+                last_lap[seg][abbr] = lap_sec
 
             await websocket.send_text(
                 _build_snapshot(seg, abbr, ev_type, just_improved, session_time)
