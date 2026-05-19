@@ -16,8 +16,7 @@ export default function App() {
         </Link>
         <nav className="topbar-nav">
           <Link to="/live" className="topbar-nav-link">
-            <span className="topbar-live-dot" />
-            Live
+            Replay
           </Link>
         </nav>
       </header>

@@ -1,4 +1,5 @@
 import { useState, useEffect } from 'react'
+import { Link } from 'react-router-dom'
 import Sidebar from '../components/Sidebar'
 import RaceCard from '../components/RaceCard'
 import { RACES_BY_SEASON, SEASONS } from '../data/seasons'
@@ -57,6 +58,18 @@ function Countdown({ datetime }) {
   )
 }
 
+function LiveButton({ ts }) {
+  const [now, setNow] = useState(Date.now())
+  useEffect(() => {
+    const id = setInterval(() => setNow(Date.now()), 5000)
+    return () => clearInterval(id)
+  }, [])
+  const isLive = now >= ts
+  return isLive
+    ? <Link to="/live" className="ne-live-btn ne-live-active">● LIVE</Link>
+    : <span className="ne-live-btn ne-live-disabled">● LIVE</span>
+}
+
 function NextEventWidget({ year }) {
   const [event, setEvent] = useState(null)
   const [loading, setLoading] = useState(true)
@@ -97,9 +110,12 @@ function NextEventWidget({ year }) {
           </div>
         </div>
         <div className="ne-right">
-          <span className="ne-session-badge" style={{ color, borderColor: color, background: `${color}18` }}>
-            {event.session}
-          </span>
+          <div className="ne-session-row">
+            <span className="ne-session-badge" style={{ color, borderColor: color, background: `${color}18` }}>
+              {event.session}
+            </span>
+            <LiveButton ts={ts} />
+          </div>
           <div className="ne-datetime">
             <span className="ne-date">{date}</span>
             <span className="ne-time">{time}</span>
