@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { Link } from 'react-router-dom'
 import { useWebSocket } from '../hooks/useWebSocket'
 import './LiveTimingPage.css'
@@ -102,6 +102,13 @@ function MicroSectors({ s1, s2, s3, s1Color, s2Color, s3Color, s1Bars, s2Bars, s
       })}
     </div>
   )
+}
+
+function formatCountdown(secs) {
+  if (secs == null || secs < 0) secs = 0
+  const s = Math.floor(secs)
+  const m = Math.floor(s / 60)
+  return `${m}:${String(s % 60).padStart(2, '0')}`
 }
 
 function StatusBadge({ status }) {
@@ -289,8 +296,11 @@ function ConnectionPanel({ onConnect, error }) {
 // ─── Main page ────────────────────────────────────────────────────────────────
 
 export default function LiveTimingPage() {
-  const { status, sessionInfo, currentSegment, segmentData, error, connect, disconnect } = useWebSocket()
+  const { status, sessionInfo, currentSegment, segmentData, sessionTime, error, connect, disconnect } = useWebSocket()
   const [viewingSegment, setViewingSegment] = useState(null)
+  const [displayTime, setDisplayTime] = useState(null)
+  const speedRef    = useRef(10)
+  const lastRef     = useRef({ sessionTime: null, wallTime: null })
 
   // Auto-follow the live segment unless user pinned another tab
   const activeSegment = viewingSegment ?? currentSegment
@@ -302,10 +312,38 @@ export default function LiveTimingPage() {
     setViewingSegment(null)
   }, [currentSegment])
 
+  // Record the anchor point whenever a new sessionTime arrives from the server
+  useEffect(() => {
+    if (sessionTime != null) {
+      lastRef.current = { sessionTime, wallTime: Date.now() }
+    }
+  }, [sessionTime])
+
+  // Interpolate session time in real-time between WebSocket updates
+  useEffect(() => {
+    const id = setInterval(() => {
+      const { sessionTime: st, wallTime: wt } = lastRef.current
+      if (st == null || wt == null) return
+      const elapsed = (Date.now() - wt) / 1000
+      setDisplayTime(st + elapsed * speedRef.current)
+    }, 200)
+    return () => clearInterval(id)
+  }, [])
+
   const handleConnect = (params) => {
+    speedRef.current = params.speed ?? 10
+    lastRef.current  = { sessionTime: null, wallTime: null }
+    setDisplayTime(null)
     setViewingSegment(null)
     connect(params)
   }
+
+  // Countdown = time remaining until last event in the active segment
+  const segmentEndTimes = sessionInfo?.segmentEndTimes ?? {}
+  const endTime  = activeSegment ? segmentEndTimes[activeSegment] : null
+  const countdown = endTime != null && displayTime != null
+    ? Math.max(0, endTime - displayTime)
+    : null
 
   const isActive = status === 'connected' || status === 'ended' || status === 'connecting'
 
@@ -334,6 +372,11 @@ export default function LiveTimingPage() {
               ? `${sessionInfo.year} · Rd ${sessionInfo.round} · ${sessionInfo.raceName} · ${sessionInfo.sessionName}`
               : 'Loading session…'}
           </span>
+          {countdown != null && (
+            <span className={`live-countdown${countdown === 0 ? ' live-countdown-zero' : ''}`}>
+              {formatCountdown(countdown)}
+            </span>
+          )}
           <StatusBadge status={status} />
         </div>
         <button className="disconnect-btn" onClick={disconnect}>Disconnect</button>

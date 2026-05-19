@@ -96,6 +96,103 @@ function CustomTooltip({ active, payload, label, activeData, activeTab }) {
   )
 }
 
+// ─── Stats full-season table ──────────────────────────────────────────────────
+
+const TAB_LABELS = {
+  championship: 'Points per Race',
+  race:         'Race Results',
+  qualifying:   'Qualifying Results',
+  sprint:       'Sprint Results',
+  sprint_quali: 'Sprint Qualifying Results',
+}
+
+function cellBg(val, isChamp) {
+  if (val == null) return null
+  if (isChamp) {
+    if (val >= 25) return 'rgba(255,215,0,0.18)'
+    if (val >= 18) return 'rgba(192,192,192,0.13)'
+    if (val >= 15) return 'rgba(205,127,50,0.15)'
+    if (val >= 10) return 'rgba(255,255,255,0.07)'
+    if (val >= 1)  return 'rgba(255,255,255,0.04)'
+    return null
+  }
+  if (val === 1) return 'rgba(255,215,0,0.18)'
+  if (val === 2) return 'rgba(192,192,192,0.13)'
+  if (val === 3) return 'rgba(205,127,50,0.15)'
+  if (val <= 10) return 'rgba(255,255,255,0.05)'
+  return null
+}
+
+function StatsTable({ activeTab, driverStats, allDrivers }) {
+  const rounds = driverStats[activeTab]
+  const isChamp = activeTab === 'championship'
+
+  if (!rounds || rounds.length === 0)
+    return <p className="status-message st-no-data">No data available for this tab.</p>
+
+  const lastRound = rounds[rounds.length - 1]
+  const sorted = allDrivers  // already ordered by championship standing
+
+  const getVal = (abbr, ri) => {
+    const curr = rounds[ri]?.drivers[abbr]
+    if (!curr) return null
+    if (isChamp) {
+      const cur = curr.points ?? 0
+      const prv = ri > 0 ? (rounds[ri - 1]?.drivers[abbr]?.points ?? 0) : 0
+      return cur - prv
+    }
+    return curr.position ?? null
+  }
+
+  return (
+    <div className="st-section">
+      <h3 className="st-title">{TAB_LABELS[activeTab]}</h3>
+      <div className="st-wrap">
+        <table className="st-table">
+          <thead>
+            <tr>
+              <th className="st-th st-col-driver st-sticky">Driver</th>
+              {rounds.map(r => (
+                <th key={r.round} className="st-th st-col-round" title={r.name}>
+                  {r.round}
+                </th>
+              ))}
+              {isChamp && <th className="st-th st-col-total">Pts</th>}
+            </tr>
+          </thead>
+          <tbody>
+            {sorted.map((d, i) => {
+              const abbr = d.abbreviation
+              return (
+                <tr key={abbr} className={i % 2 === 0 ? 'st-even' : ''}>
+                  <td className="st-td st-col-driver st-sticky">
+                    <span className="st-team-bar" style={{ background: d.teamColor }} />
+                    <span className="st-abbr">{abbr}</span>
+                  </td>
+                  {rounds.map((r, ri) => {
+                    const val = getVal(abbr, ri)
+                    const bg  = cellBg(val, isChamp)
+                    return (
+                      <td key={r.round} className="st-td st-cell" style={bg ? { background: bg } : undefined}>
+                        {val != null ? val : '—'}
+                      </td>
+                    )
+                  })}
+                  {isChamp && (
+                    <td className="st-td st-col-total">
+                      {lastRound?.drivers[abbr]?.points ?? 0}
+                    </td>
+                  )}
+                </tr>
+              )
+            })}
+          </tbody>
+        </table>
+      </div>
+    </div>
+  )
+}
+
 export default function ChampionshipProgressionPage() {
   const { year } = useParams()
   const { state } = useLocation()
@@ -325,6 +422,12 @@ export default function ChampionshipProgressionPage() {
                 </ResponsiveContainer>
               </div>
             )}
+
+            <StatsTable
+              activeTab={activeTab}
+              driverStats={driverStats}
+              allDrivers={allDrivers}
+            />
           </>
         )}
       </div>

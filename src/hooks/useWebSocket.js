@@ -25,6 +25,7 @@ export function useWebSocket() {
     setSessionInfo(null)
     setCurrentSegment(null)
     setSegmentData({})
+    setSessionTime(null)
     setError(null)
 
     const url = mode === 'live'
@@ -50,6 +51,7 @@ export function useWebSocket() {
           break
         case 'timing_update':
           setSegmentData(prev => ({ ...prev, [msg.segment]: msg }))
+          setSessionTime(msg.sessionTime)
           break
         case 'session_end':
           setStatus('ended')
@@ -89,5 +91,5 @@ export function useWebSocket() {
     wsRef.current?.close()
   }, [])
 
-  return { status, sessionInfo, currentSegment, segmentData, error, connect, disconnect }
+  return { status, sessionInfo, currentSegment, segmentData, sessionTime, error, connect, disconnect }
 }
