@@ -1,0 +1,196 @@
+{
+  "/F1CronosBackend": [
+    {
+      "type": "aws:cdk:creationStack",
+      "data": [
+        "<anonymous> (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\bin\\app.ts:8:1)",
+        "...node internals, ts-node, ts-node, ts-node..."
+      ]
+    }
+  ],
+  "/F1CronosBackend/SsmParameterValue:--aws--service--ami-amazon-linux-latest--al2023-ami-kernel-6.1-x86_64:C96584B6-F00A-464E-AD19-53AFF4B05118.Parameter": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "SsmParameterValueawsserviceamiamazonlinuxlatestal2023amikernel61x8664C96584B6F00A464EAD1953AFF4B05118Parameter"
+    },
+    {
+      "type": "aws:cdk:creationStack",
+      "data": [
+        "...new Instance2 in aws-cdk-lib...",
+        "new BackendStack (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\lib\\backend-stack.ts:119:22)",
+        "<anonymous> (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\bin\\app.ts:8:1)",
+        "...node internals, ts-node, ts-node, ts-node..."
+      ]
+    }
+  ],
+  "/F1CronosBackend/BackendEip": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "BackendEip"
+    },
+    {
+      "type": "aws:cdk:creationStack",
+      "data": [
+        "new BackendStack (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\lib\\backend-stack.ts:133:17)",
+        "<anonymous> (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\bin\\app.ts:8:1)",
+        "...node internals, ts-node, ts-node, ts-node..."
+      ]
+    }
+  ],
+  "/F1CronosBackend/BackendEipAssoc": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "BackendEipAssoc"
+    },
+    {
+      "type": "aws:cdk:creationStack",
+      "data": [
+        "new BackendStack (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\lib\\backend-stack.ts:134:5)",
+        "<anonymous> (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\bin\\app.ts:8:1)",
+        "...node internals, ts-node, ts-node, ts-node..."
+      ]
+    }
+  ],
+  "/F1CronosBackend/BackendUrl": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "BackendUrl"
+    },
+    {
+      "type": "aws:cdk:creationStack",
+      "data": [
+        "new BackendStack (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\lib\\backend-stack.ts:140:5)",
+        "<anonymous> (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\bin\\app.ts:8:1)",
+        "...node internals, ts-node, ts-node, ts-node..."
+      ]
+    }
+  ],
+  "/F1CronosBackend/InstanceId": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "InstanceId"
+    },
+    {
+      "type": "aws:cdk:creationStack",
+      "data": [
+        "new BackendStack (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\lib\\backend-stack.ts:146:5)",
+        "<anonymous> (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\bin\\app.ts:8:1)",
+        "...node internals, ts-node, ts-node, ts-node..."
+      ]
+    }
+  ],
+  "/F1CronosBackend/BootstrapVersion": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "BootstrapVersion"
+    },
+    {
+      "type": "aws:cdk:creationStack",
+      "data": [
+        "...aws-cdk-lib, node internals, @cspotcode\\source-map-support...",
+        "(no user code in 9007199254740991 frames, use --stack-trace-limit to capture more)"
+      ]
+    }
+  ],
+  "/F1CronosBackend/CheckBootstrapVersion": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "CheckBootstrapVersion"
+    },
+    {
+      "type": "aws:cdk:creationStack",
+      "data": [
+        "...aws-cdk-lib, node internals, @cspotcode\\source-map-support...",
+        "(no user code in 9007199254740991 frames, use --stack-trace-limit to capture more)"
+      ]
+    }
+  ],
+  "/F1CronosBackend/BackendSg/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "BackendSgD814DA87"
+    },
+    {
+      "type": "aws:cdk:creationStack",
+      "data": [
+        "...new SecurityGroup2 in aws-cdk-lib...",
+        "new BackendStack (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\lib\\backend-stack.ts:22:16)",
+        "<anonymous> (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\bin\\app.ts:8:1)",
+        "...node internals, ts-node, ts-node, ts-node..."
+      ]
+    }
+  ],
+  "/F1CronosBackend/BackendRole/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "BackendRole78202DE5"
+    },
+    {
+      "type": "aws:cdk:creationStack",
+      "data": [
+        "...new Role2 in aws-cdk-lib...",
+        "new BackendStack (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\lib\\backend-stack.ts:32:18)",
+        "<anonymous> (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\bin\\app.ts:8:1)",
+        "...node internals, ts-node, ts-node, ts-node..."
+      ]
+    }
+  ],
+  "/F1CronosBackend/BackendInstance/InstanceProfile": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "BackendInstanceInstanceProfileE0E324FD"
+    },
+    {
+      "type": "aws:cdk:creationStack",
+      "data": [
+        "...new Instance2 in aws-cdk-lib...",
+        "new BackendStack (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\lib\\backend-stack.ts:119:22)",
+        "<anonymous> (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\bin\\app.ts:8:1)",
+        "...node internals, ts-node, ts-node, ts-node..."
+      ]
+    }
+  ],
+  "/F1CronosBackend/BackendInstance/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "BackendInstanceED889FA2"
+    },
+    {
+      "type": "aws:cdk:creationStack",
+      "data": [
+        "...new Instance2 in aws-cdk-lib...",
+        "new BackendStack (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\lib\\backend-stack.ts:119:22)",
+        "<anonymous> (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\bin\\app.ts:8:1)",
+        "...node internals, ts-node, ts-node, ts-node..."
+      ]
+    }
+  ],
+  "/F1CronosBackend/CDKMetadata/Default": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "CDKMetadata"
+    },
+    {
+      "type": "aws:cdk:creationStack",
+      "data": [
+        "...aws-cdk-lib, node internals, @cspotcode\\source-map-support...",
+        "(no user code in 9007199254740991 frames, use --stack-trace-limit to capture more)"
+      ]
+    }
+  ],
+  "/F1CronosBackend/BackendRole/DefaultPolicy/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "BackendRoleDefaultPolicy96F27249"
+    },
+    {
+      "type": "aws:cdk:creationStack",
+      "data": [
+        "...Asset.grantRead in aws-cdk-lib...",
+        "new BackendStack (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\lib\\backend-stack.ts:38:18)",
+        "<anonymous> (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\bin\\app.ts:8:1)",
+        "...node internals, ts-node, ts-node, ts-node..."
+      ]
+    }
+  ]
+}

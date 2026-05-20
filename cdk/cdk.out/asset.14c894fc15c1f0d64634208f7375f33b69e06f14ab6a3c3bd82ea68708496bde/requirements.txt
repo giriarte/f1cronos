@@ -1,0 +1,5 @@
+fastf1==3.5.3
+fastapi==0.115.12
+uvicorn[standard]==0.34.2
+pandas>=2.1.0
+websockets>=10.3,<14

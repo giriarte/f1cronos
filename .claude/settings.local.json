@@ -11,7 +11,10 @@
       "PowerShell(Head -20)",
       "Bash(python -c \"import ast, sys; ast.parse\\(open\\('backend/main.py'\\).read\\(\\)\\); print\\('syntax OK'\\)\")",
       "Bash(python -c \"import ast; ast.parse\\(open\\('backend/main.py'\\).read\\(\\)\\); print\\('backend OK'\\)\")",
-      "WebFetch(domain:f1cosmos.com)"
+      "WebFetch(domain:f1cosmos.com)",
+      "Bash(dir c:\\\\Users\\\\tito_\\\\workplace\\\\f1cronos /b)",
+      "Bash(npm install *)",
+      "Bash(npx tsc *)"
     ]
   }
 }
