@@ -26,7 +26,7 @@ const COMPOUND_META = {
 const SEGMENT_CUTOFFS = {
   Q1: 15, Q2: 10, Q3: null,
   SQ1: 15, SQ2: 10, SQ3: null,
-  P: null,
+  P: null, Race: null, Sprint: null,
 }
 
 // ─── Small reusable components ────────────────────────────────────────────────
@@ -257,6 +257,8 @@ function ConnectionPanel({ onConnect, error }) {
             <div className="connect-row">
               <label className="connect-label">Session</label>
               <select className="connect-select" value={session} onChange={e => setSession(e.target.value)}>
+                <option>Race</option>
+                <option>Sprint</option>
                 <option>Qualifying</option>
                 <option>Sprint Qualifying</option>
                 <option>Practice 1</option>

@@ -17,7 +17,7 @@
       "type": "aws:cdk:creationStack",
       "data": [
         "...new Instance2 in aws-cdk-lib...",
-        "new BackendStack (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\lib\\backend-stack.ts:119:22)",
+        "new BackendStack (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\lib\\backend-stack.ts:121:22)",
         "<anonymous> (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\bin\\app.ts:8:1)",
         "...node internals, ts-node, ts-node, ts-node..."
       ]
@@ -31,7 +31,7 @@
     {
       "type": "aws:cdk:creationStack",
       "data": [
-        "new BackendStack (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\lib\\backend-stack.ts:133:17)",
+        "new BackendStack (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\lib\\backend-stack.ts:135:17)",
         "<anonymous> (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\bin\\app.ts:8:1)",
         "...node internals, ts-node, ts-node, ts-node..."
       ]
@@ -45,7 +45,7 @@
     {
       "type": "aws:cdk:creationStack",
       "data": [
-        "new BackendStack (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\lib\\backend-stack.ts:134:5)",
+        "new BackendStack (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\lib\\backend-stack.ts:136:5)",
         "<anonymous> (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\bin\\app.ts:8:1)",
         "...node internals, ts-node, ts-node, ts-node..."
       ]
@@ -59,7 +59,7 @@
     {
       "type": "aws:cdk:creationStack",
       "data": [
-        "new BackendStack (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\lib\\backend-stack.ts:140:5)",
+        "new BackendStack (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\lib\\backend-stack.ts:168:5)",
         "<anonymous> (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\bin\\app.ts:8:1)",
         "...node internals, ts-node, ts-node, ts-node..."
       ]
@@ -73,7 +73,7 @@
     {
       "type": "aws:cdk:creationStack",
       "data": [
-        "new BackendStack (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\lib\\backend-stack.ts:146:5)",
+        "new BackendStack (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\lib\\backend-stack.ts:174:5)",
         "<anonymous> (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\bin\\app.ts:8:1)",
         "...node internals, ts-node, ts-node, ts-node..."
       ]
@@ -114,7 +114,7 @@
       "type": "aws:cdk:creationStack",
       "data": [
         "...new SecurityGroup2 in aws-cdk-lib...",
-        "new BackendStack (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\lib\\backend-stack.ts:22:16)",
+        "new BackendStack (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\lib\\backend-stack.ts:24:16)",
         "<anonymous> (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\bin\\app.ts:8:1)",
         "...node internals, ts-node, ts-node, ts-node..."
       ]
@@ -129,7 +129,7 @@
       "type": "aws:cdk:creationStack",
       "data": [
         "...new Role2 in aws-cdk-lib...",
-        "new BackendStack (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\lib\\backend-stack.ts:32:18)",
+        "new BackendStack (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\lib\\backend-stack.ts:34:18)",
         "<anonymous> (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\bin\\app.ts:8:1)",
         "...node internals, ts-node, ts-node, ts-node..."
       ]
@@ -144,7 +144,7 @@
       "type": "aws:cdk:creationStack",
       "data": [
         "...new Instance2 in aws-cdk-lib...",
-        "new BackendStack (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\lib\\backend-stack.ts:119:22)",
+        "new BackendStack (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\lib\\backend-stack.ts:121:22)",
         "<anonymous> (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\bin\\app.ts:8:1)",
         "...node internals, ts-node, ts-node, ts-node..."
       ]
@@ -159,7 +159,22 @@
       "type": "aws:cdk:creationStack",
       "data": [
         "...new Instance2 in aws-cdk-lib...",
-        "new BackendStack (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\lib\\backend-stack.ts:119:22)",
+        "new BackendStack (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\lib\\backend-stack.ts:121:22)",
+        "<anonymous> (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\bin\\app.ts:8:1)",
+        "...node internals, ts-node, ts-node, ts-node..."
+      ]
+    }
+  ],
+  "/F1CronosBackend/BackendDistribution/Resource": [
+    {
+      "type": "aws:cdk:logicalId",
+      "data": "BackendDistribution025C1152"
+    },
+    {
+      "type": "aws:cdk:creationStack",
+      "data": [
+        "...new Distribution2 in aws-cdk-lib...",
+        "new BackendStack (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\lib\\backend-stack.ts:152:26)",
         "<anonymous> (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\bin\\app.ts:8:1)",
         "...node internals, ts-node, ts-node, ts-node..."
       ]
@@ -187,7 +202,7 @@
       "type": "aws:cdk:creationStack",
       "data": [
         "...Asset.grantRead in aws-cdk-lib...",
-        "new BackendStack (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\lib\\backend-stack.ts:38:18)",
+        "new BackendStack (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\lib\\backend-stack.ts:40:18)",
         "<anonymous> (C:\\Users\\tito_\\workplace\\f1cronos\\cdk\\bin\\app.ts:8:1)",
         "...node internals, ts-node, ts-node, ts-node..."
       ]

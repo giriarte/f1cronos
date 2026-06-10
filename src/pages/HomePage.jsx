@@ -18,10 +18,13 @@ const COUNTRY_CODE = {
 }
 
 const SESSION_COLORS = {
-  'Race': '#e10600',
+  'Race':        '#e10600',
   'Sprint Race': '#ff8700',
-  'Qualifying': '#4da6ff',
-  'Sprint Qualy': '#b440fb',
+  'Qualifying':  '#4da6ff',
+  'Sprint Qualy':'#b440fb',
+  'Practice 1':  '#00c896',
+  'Practice 2':  '#00c896',
+  'Practice 3':  '#00c896',
 }
 
 function formatEventDatetime(isoStr) {

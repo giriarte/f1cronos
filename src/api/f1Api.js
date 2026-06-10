@@ -1,5 +1,13 @@
 const BASE_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000'
 
+async function apiError(res, fallback) {
+  try {
+    const body = await res.json()
+    if (body?.detail) return new Error(body.detail)
+  } catch {}
+  return new Error(fallback)
+}
+
 export async function fetchSchedule(year) {
   const res = await fetch(`${BASE_URL}/schedule/${year}`)
   if (!res.ok) throw new Error(`Failed to fetch ${year} schedule (${res.status})`)
@@ -17,7 +25,7 @@ export async function fetchResults(year, round, sessionName, eventDate) {
   const encoded = encodeURIComponent(sessionName)
   const params = eventDate ? `?event_date=${encodeURIComponent(eventDate)}` : ''
   const res = await fetch(`${BASE_URL}/results/${year}/${round}/${encoded}${params}`)
-  if (!res.ok) throw new Error(`Failed to fetch results (${res.status})`)
+  if (!res.ok) throw await apiError(res, `Failed to fetch results (${res.status})`)
   return res.json()
 }
 

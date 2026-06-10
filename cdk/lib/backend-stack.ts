@@ -2,6 +2,8 @@ import * as cdk from 'aws-cdk-lib'
 import * as ec2 from 'aws-cdk-lib/aws-ec2'
 import * as iam from 'aws-cdk-lib/aws-iam'
 import * as s3assets from 'aws-cdk-lib/aws-s3-assets'
+import * as cloudfront from 'aws-cdk-lib/aws-cloudfront'
+import * as origins from 'aws-cdk-lib/aws-cloudfront-origins'
 import { Construct } from 'constructs'
 import * as path from 'path'
 
@@ -136,10 +138,36 @@ export class BackendStack extends cdk.Stack {
       instanceId:   instance.instanceId,
     })
 
+    // ── CloudFront distribution ────────────────────────────────────────────
+    // CloudFront requires a DNS hostname, not a bare IP. Build the EIP's
+    // EC2 reverse-DNS name: ec2-A-B-C-D.<region>.compute.amazonaws.com
+    const eipHostname = cdk.Fn.join('', [
+      'ec2-',
+      cdk.Fn.join('-', cdk.Fn.split('.', eip.ref)),
+      this.region === 'us-east-1'
+        ? '.compute-1.amazonaws.com'
+        : `.${this.region}.compute.amazonaws.com`,
+    ])
+
+    const distribution = new cloudfront.Distribution(this, 'BackendDistribution', {
+      defaultBehavior: {
+        origin: new origins.HttpOrigin(eipHostname, {
+          protocolPolicy: cloudfront.OriginProtocolPolicy.HTTP_ONLY,
+        }),
+        viewerProtocolPolicy: cloudfront.ViewerProtocolPolicy.REDIRECT_TO_HTTPS,
+        // No caching — this is a WebSocket/API origin
+        cachePolicy: cloudfront.CachePolicy.CACHING_DISABLED,
+        // Forward all headers so WebSocket Upgrade handshake passes through
+        originRequestPolicy: cloudfront.OriginRequestPolicy.ALL_VIEWER_EXCEPT_HOST_HEADER,
+        allowedMethods: cloudfront.AllowedMethods.ALLOW_ALL,
+      },
+      comment: 'F1 Cronos backend HTTPS termination',
+    })
+
     // ── Outputs ────────────────────────────────────────────────────────────
     new cdk.CfnOutput(this, 'BackendUrl', {
-      value:       `http://${eip.ref}`,
-      description: 'Backend HTTP URL — set as VITE_API_URL in Amplify',
+      value:       `https://${distribution.distributionDomainName}`,
+      description: 'Backend HTTPS URL — set as VITE_API_URL in Amplify',
       exportName:  'F1CronosBackendUrl',
     })
 

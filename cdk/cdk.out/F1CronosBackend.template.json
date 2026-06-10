@@ -192,10 +192,73 @@
     "aws:cdk:path": "F1CronosBackend/BackendEipAssoc"
    }
   },
+  "BackendDistribution025C1152": {
+   "Type": "AWS::CloudFront::Distribution",
+   "Properties": {
+    "DistributionConfig": {
+     "Comment": "F1 Cronos backend HTTPS termination",
+     "DefaultCacheBehavior": {
+      "AllowedMethods": [
+       "GET",
+       "HEAD",
+       "OPTIONS",
+       "PUT",
+       "PATCH",
+       "POST",
+       "DELETE"
+      ],
+      "CachePolicyId": "4135ea2d-6df8-44a3-9df3-4b5a84be39ad",
+      "Compress": true,
+      "OriginRequestPolicyId": "b689b0a8-53d0-40ab-baf2-68738e2966ac",
+      "TargetOriginId": "F1CronosBackendBackendDistributionOrigin1BA174E0A",
+      "ViewerProtocolPolicy": "redirect-to-https"
+     },
+     "Enabled": true,
+     "HttpVersion": "http2",
+     "IPV6Enabled": true,
+     "Origins": [
+      {
+       "CustomOriginConfig": {
+        "OriginProtocolPolicy": "http-only",
+        "OriginSSLProtocols": [
+         "TLSv1.2"
+        ]
+       },
+       "DomainName": {
+        "Fn::Join": [
+         "",
+         [
+          "ec2-",
+          {
+           "Fn::Join": [
+            "-",
+            {
+             "Fn::Split": [
+              ".",
+              {
+               "Ref": "BackendEip"
+              }
+             ]
+            }
+           ]
+          },
+          ".sa-east-1.compute.amazonaws.com"
+         ]
+        ]
+       },
+       "Id": "F1CronosBackendBackendDistributionOrigin1BA174E0A"
+      }
+     ]
+    }
+   },
+   "Metadata": {
+    "aws:cdk:path": "F1CronosBackend/BackendDistribution/Resource"
+   }
+  },
   "CDKMetadata": {
    "Type": "AWS::CDK::Metadata",
    "Properties": {
-    "Analytics": "v2:deflate64:H4sIAAAAAAAA/1WOUY7CMAxEz8J/6oXAHgAQQv2iag+AvMEg0zZBsQNCVe++agEBX2/GHnlswf4uYDrBm2TuUGcN/0FXKbra4E32ncz3KEIqsBxgZA6r5GrSFQoZcha6ilyKrPdtDOli1kf/Pci9KHpHw+ZTb/LiiaVIcIzKwfeGsYWuDM2YGVmEht19sG/1OlTEcOSG+t6M71WKJ/YnU5KEFB89BUZsSSkOZpf0krQ3PhwIzvJztQuYWZhOzsKcxeSVW4LywX/Go8d8HAEAAA=="
+    "Analytics": "v2:deflate64:H4sIAAAAAAAA/1WPUW7CQAxEz8L/xtAAB4C2qvhqlBwAmY2DTDa7aO0tQlHuXm1oVfr1ZuzRyC6h3G5gtcCbFLbtC8cnGBtF2xu8yXGU9RFFSAV2GUbWsE+2J92jkCFbwtiQTZH1/hFDuprXzv8fHLwoekt586zfD9UPdiLBMioHPxnGAcY6uDkzswqO7T3bP/VbVMXQsaPJWBdS28XgFcY3Fo18Srkwh5/9NJn5kUbxzP5sapKQ4uOiCiMOpBSz+Ux6TToZH1qCiyy/yg28lLBaXIS5iMkrDwT1g99FC3MJRgEAAA=="
    },
    "Metadata": {
     "aws:cdk:path": "F1CronosBackend/CDKMetadata/Default"
@@ -215,14 +278,17 @@
  },
  "Outputs": {
   "BackendUrl": {
-   "Description": "Backend HTTP URL — set as VITE_API_URL in Amplify",
+   "Description": "Backend HTTPS URL — set as VITE_API_URL in Amplify",
    "Value": {
     "Fn::Join": [
      "",
      [
-      "http://",
+      "https://",
       {
-       "Ref": "BackendEip"
+       "Fn::GetAtt": [
+        "BackendDistribution025C1152",
+        "DomainName"
+       ]
       }
      ]
     ]

@@ -69,14 +69,23 @@ const COUNTRY_CODES = {
 
 export function mapScheduleToRaces(events) {
   const today = new Date()
-  return events.map((e) => ({
-    round:       e.RoundNumber,
-    name:        e.EventName,
-    circuit:     e.Location,
-    country:     e.Country,
-    countryCode: COUNTRY_CODES[e.Country] ?? 'un',
-    trackMap:    TRACK_MAPS[e.Location] ?? null,
-    date:        e.EventDate.split('T')[0],
-    status:      new Date(e.EventDate) < today ? 'completed' : 'upcoming',
-  }))
+  return events.map((e) => {
+    const raceDate       = new Date(e.EventDate)
+    const firstSessDate  = e.Session1Date ? new Date(e.Session1Date) : null
+    const status =
+      raceDate  < today ? 'completed'   :
+      firstSessDate && firstSessDate < today ? 'in_progress' :
+      'upcoming'
+    return {
+      round:            e.RoundNumber,
+      name:             e.EventName,
+      circuit:          e.Location,
+      country:          e.Country,
+      countryCode:      COUNTRY_CODES[e.Country] ?? 'un',
+      trackMap:         TRACK_MAPS[e.Location] ?? null,
+      date:             e.EventDate.split('T')[0],
+      firstSessionDate: e.Session1Date ? e.Session1Date.split('T')[0] : null,
+      status,
+    }
+  })
 }

@@ -310,7 +310,10 @@ export default function RaceDetailPage() {
     fetchSessions(year, round, race?.date)
       .then((data) => {
         setSessions(data)
-        setSelectedSession(data.at(-1)?.name ?? null)
+        const now = new Date()
+        const completed = data.filter(s => s.date && new Date(s.date) < now)
+        const toSelect = (completed.length > 0 ? completed : data).at(-1)
+        setSelectedSession(toSelect?.name ?? null)
       })
       .catch((err) => setError(err.message))
       .finally(() => setLoadingSessions(false))
@@ -383,9 +386,14 @@ export default function RaceDetailPage() {
               value={selectedSession ?? ''}
               onChange={(e) => setSelectedSession(e.target.value)}
             >
-              {sessions.map((s) => (
-                <option key={s.index} value={s.name}>{s.name}</option>
-              ))}
+              {sessions.map((s) => {
+                const isUpcoming = s.date && new Date(s.date) >= new Date()
+                return (
+                  <option key={s.index} value={s.name} disabled={isUpcoming}>
+                    {s.name}{isUpcoming ? ' — upcoming' : ''}
+                  </option>
+                )
+              })}
             </select>
           )}
         </div>

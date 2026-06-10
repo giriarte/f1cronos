@@ -2,6 +2,7 @@ import asyncio
 import json
 import random
 import threading
+import time
 from contextlib import asynccontextmanager
 from typing import Optional
 
@@ -86,8 +87,10 @@ def root():
 async def get_schedule(year: int):
     """Return the full event schedule for a given season."""
     schedule = await run_blocking(fastf1.get_event_schedule, year, include_testing=False)
-    cols = ["RoundNumber", "Country", "Location", "EventName", "OfficialEventName", "EventDate", "EventFormat"]
-    return schedule[cols].to_dict(orient="records")
+    cols = ["RoundNumber", "Country", "Location", "EventName", "OfficialEventName",
+            "EventDate", "EventFormat", "Session1Date"]
+    available = [c for c in cols if c in schedule.columns]
+    return schedule[available].to_dict(orient="records")
 
 
 # ---------------------------------------------------------------------------
@@ -202,8 +205,16 @@ async def get_available_sessions(year: int, round_number: int, event_date: Optio
     sessions = []
     for i in range(1, 6):
         name = event.get(f"Session{i}")
-        if name and str(name) not in ("", "None", "nan"):
-            sessions.append({"index": i, "name": str(name)})
+        if not name or str(name) in ("", "None", "nan"):
+            continue
+        date = event.get(f"Session{i}Date")
+        date_str = None
+        if date is not None and not pd.isna(date):
+            if hasattr(date, 'isoformat'):
+                date_str = date.isoformat()
+            else:
+                date_str = str(date)
+        sessions.append({"index": i, "name": str(name), "date": date_str})
     return sessions
 
 
@@ -246,7 +257,10 @@ def _build_results_from_session(session) -> list:
 
 def _build_results_from_laps(session) -> list:
     """Derive practice results from fastest valid lap per driver."""
-    laps = session.laps
+    try:
+        laps = session.laps
+    except Exception:
+        return []
     if laps is None or laps.empty:
         return []
 
@@ -304,10 +318,10 @@ async def get_session_results(year: int, round_number: int, session_name: str, e
         real_round = _resolve_round(schedule, round_number, event_date)
         s = fastf1.get_session(year, real_round, session_name)
         n = session_name.lower()
-        # Sprint qualifying/shootout results are derived from timing data and require
-        # race control messages to account for deleted lap times.
+        is_practice = "practice" in n
         needs_messages = ("sprint" in n and "qualifying" in n) or "shootout" in n
-        s.load(telemetry=False, weather=False, messages=needs_messages)
+        # Practice results are derived from laps; all others use session.results.
+        s.load(laps=is_practice, telemetry=False, weather=False, messages=needs_messages)
         return s
 
     try:
@@ -315,9 +329,18 @@ async def get_session_results(year: int, round_number: int, session_name: str, e
     except Exception as e:
         raise HTTPException(status_code=404, detail=str(e))
 
-    # Practice sessions have results populated but Time is always NaT; use laps instead.
     is_practice = "practice" in session_name.lower()
-    if not is_practice and session.results is not None and not session.results.empty:
+    if is_practice:
+        rows = _build_results_from_laps(session)
+        if not rows:
+            raise HTTPException(
+                status_code=404,
+                detail="No lap data available yet for this session. "
+                       "Results are usually available a few hours after the session ends."
+            )
+        return rows
+
+    if session.results is not None and not session.results.empty:
         return _build_results_from_session(session)
 
     return _build_results_from_laps(session)
@@ -760,23 +783,36 @@ async def get_drivers(year: int, round_number: int, session_type: str, event_dat
 @app.get("/next-event/{year}")
 async def get_next_event(year: int):
     """
-    Return the next upcoming session (Sprint Qualifying, Sprint, Qualifying, or Race)
-    in the given season. Returns {"next": null} when the season is over.
+    Return the current or next upcoming session in the given season.
+    A session that started within its expected duration is treated as live/current
+    and is preferred over a future session. Returns {"next": null} when the season is over.
     """
-    TARGET = {"race", "sprint", "qualifying", "sprint qualifying", "sprint shootout"}
+    TARGET = {"race", "sprint", "qualifying", "sprint qualifying", "sprint shootout",
+              "practice 1", "practice 2", "practice 3"}
     LABEL = {
-        "race": "Race",
-        "sprint": "Sprint Race",
-        "qualifying": "Qualifying",
-        "sprint qualifying": "Sprint Qualy",
+        "race":            "Race",
+        "sprint":          "Sprint Race",
+        "qualifying":      "Qualifying",
+        "sprint qualifying":"Sprint Qualy",
         "sprint shootout": "Sprint Qualy",
+        "practice 1":      "Practice 1",
+        "practice 2":      "Practice 2",
+        "practice 3":      "Practice 3",
+    }
+    # Expected duration (minutes) per session type — used to decide if a session
+    # that already started might still be running.
+    DURATION = {
+        "race": 120, "sprint": 45,
+        "qualifying": 75, "sprint qualifying": 45, "sprint shootout": 45,
+        "practice 1": 75, "practice 2": 75, "practice 3": 75,
     }
 
     def _compute():
         schedule = fastf1.get_event_schedule(year, include_testing=False)
         schedule = schedule.sort_values("RoundNumber")
         now = pd.Timestamp.now(tz="UTC")
-        best = None
+        current  = None  # most recent session that started and might still be running
+        upcoming = None  # earliest session that hasn't started yet
 
         for _, event in schedule.iterrows():
             rn = int(event["RoundNumber"])
@@ -802,9 +838,6 @@ async def get_next_event(year: int):
                 if sess_date.tzinfo is None:
                     sess_date = sess_date.tz_localize("UTC")
 
-                if sess_date <= now:
-                    continue
-
                 candidate = {
                     "round": rn,
                     "name": short_name,
@@ -814,10 +847,20 @@ async def get_next_event(year: int):
                     "datetime": sess_date.isoformat(),
                     "eventDate": event_date_str,
                 }
-                if best is None or sess_date < pd.Timestamp(best["datetime"]):
-                    best = candidate
 
-        return best
+                if sess_date <= now:
+                    # Session has started — check if it's likely still running
+                    duration = pd.Timedelta(minutes=DURATION.get(n, 90))
+                    if now <= sess_date + duration:
+                        # Prefer the most recently started live session
+                        if current is None or sess_date > pd.Timestamp(current["datetime"]):
+                            current = candidate
+                else:
+                    # Future session — keep the earliest one
+                    if upcoming is None or sess_date < pd.Timestamp(upcoming["datetime"]):
+                        upcoming = candidate
+
+        return current or upcoming
 
     try:
         result = await run_blocking(_compute)
@@ -844,27 +887,59 @@ async def get_next_event(year: int):
 #       Outside of sessions it will connect but sit idle.
 # ---------------------------------------------------------------------------
 
+def _make_routing_client(ext_loop: asyncio.AbstractEventLoop, ext_queue: asyncio.Queue):
+    """
+    Return a SignalRClient subclass that pushes messages directly into ext_queue
+    instead of writing to a file. FastF1 3.x writes str(msg) (Python repr, not JSON)
+    to its output file, so bypassing the file is both simpler and correct.
+    """
+    import os
+    from fastf1.livetiming.client import SignalRClient
+
+    class _RoutingClient(SignalRClient):
+        async def _on_message(self, msg):
+            self._t_last_message = time.time()
+            try:
+                payload = json.dumps({"type": "timing_live", "data": msg})
+            except (TypeError, ValueError):
+                payload = json.dumps({"type": "timing_live", "data": str(msg)})
+            ext_loop.call_soon_threadsafe(ext_queue.put_nowait, payload)
+
+    return _RoutingClient(filename=os.devnull, timeout=60)
+
+
 class _LiveBridge:
-    """Bridges FastF1's threaded SignalR client to asyncio."""
+    """Runs FastF1's SignalR client in a daemon thread, routing messages to asyncio."""
 
     def __init__(self, loop: asyncio.AbstractEventLoop, queue: asyncio.Queue):
         self._loop = loop
         self._queue = queue
         self._stop = threading.Event()
 
-    def on_message(self, msg_type: str, msg, timestamp):
-        payload = json.dumps({"type": msg_type, "data": msg, "ts": str(timestamp)})
-        self._loop.call_soon_threadsafe(self._queue.put_nowait, payload)
-
     def run(self):
-        from fastf1.livetiming.client import SignalRClient  # import here — heavy dep
-
-        client = SignalRClient(filename=None, callback=self.on_message)
-        try:
-            client.start()
-        except Exception as exc:
-            error = json.dumps({"type": "error", "detail": str(exc)})
-            self._loop.call_soon_threadsafe(self._queue.put_nowait, error)
+        max_attempts = 3
+        for attempt in range(max_attempts):
+            if self._stop.is_set():
+                break
+            try:
+                client = _make_routing_client(self._loop, self._queue)
+                client.start()  # blocks until session ends or timeout
+                break
+            except Exception as exc:
+                if attempt < max_attempts - 1 and not self._stop.is_set():
+                    time.sleep(2 ** attempt)
+                    continue
+                detail = str(exc)
+                if "Expecting value" in detail or "JSONDecodeError" in detail:
+                    detail = (
+                        "Could not connect to the F1 live timing service. "
+                        "The service may not be active yet, or returned an unexpected "
+                        f"response. Try again in a few seconds. (Internal: {detail})"
+                    )
+                self._loop.call_soon_threadsafe(
+                    self._queue.put_nowait,
+                    json.dumps({"type": "error", "detail": detail}),
+                )
 
     def stop(self):
         self._stop.set()
@@ -921,12 +996,20 @@ async def live_timing_replay(
 
     # Classify session type
     name_lower = session_name.lower()
-    is_practice = "practice" in name_lower or name_lower.startswith("fp")
+    is_practice    = "practice" in name_lower or name_lower.startswith("fp")
+    is_race        = name_lower == "race"
+    is_sprint_race = name_lower == "sprint"
     is_sprint_quali = ("sprint" in name_lower and "qualifying" in name_lower) or "shootout" in name_lower
 
     if is_practice:
         segment_names = ["P"]
         session_type = "practice"
+    elif is_race:
+        segment_names = ["Race"]
+        session_type = "race"
+    elif is_sprint_race:
+        segment_names = ["Sprint"]
+        session_type = "sprint"
     elif is_sprint_quali:
         segment_names = ["SQ1", "SQ2", "SQ3"]
         session_type = "sprint_quali"
@@ -1394,10 +1477,11 @@ async def live_timing(websocket: WebSocket):
 
     try:
         while True:
-            message = await asyncio.wait_for(queue.get(), timeout=30)
-            await websocket.send_text(message)
-    except asyncio.TimeoutError:
-        await websocket.send_text(json.dumps({"type": "heartbeat"}))
+            try:
+                message = await asyncio.wait_for(queue.get(), timeout=30)
+                await websocket.send_text(message)
+            except asyncio.TimeoutError:
+                await websocket.send_text(json.dumps({"type": "heartbeat"}))
     except WebSocketDisconnect:
         pass
     finally:
