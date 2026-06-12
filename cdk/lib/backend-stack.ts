@@ -6,10 +6,27 @@ import * as cloudfront from 'aws-cdk-lib/aws-cloudfront'
 import * as origins from 'aws-cdk-lib/aws-cloudfront-origins'
 import { Construct } from 'constructs'
 import * as path from 'path'
+import * as fs from 'fs'
 
 export class BackendStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
     super(scope, id, props)
+
+    // ── Anthropic API key ──────────────────────────────────────────────────
+    // The key is uploaded to the CDK bootstrap S3 bucket as an asset — it is
+    // never embedded in the CloudFormation template.
+    // Create the file before running `cdk deploy`:  echo "sk-ant-..." > .anthropic-key
+    const keyFilePath = path.join(__dirname, '../../.anthropic-key')
+    if (!fs.existsSync(keyFilePath)) {
+      throw new Error(
+        'Missing .anthropic-key file at project root.\n' +
+        'Create it with your Anthropic API key (it is in .gitignore):\n' +
+        '  echo "sk-ant-..." > .anthropic-key'
+      )
+    }
+    const anthropicKeyAsset = new s3assets.Asset(this, 'AnthropicKeyAsset', {
+      path: keyFilePath,
+    })
 
     // ── Bundle backend/ source as an S3 asset ──────────────────────────────
     const backendAsset = new s3assets.Asset(this, 'BackendAsset', {
@@ -38,6 +55,7 @@ export class BackendStack extends cdk.Stack {
       ],
     })
     backendAsset.grantRead(role)
+    anthropicKeyAsset.grantRead(role)
 
     // ── AMI: Amazon Linux 2023 ─────────────────────────────────────────────
     const ami = ec2.MachineImage.latestAmazonLinux2023()
@@ -63,6 +81,12 @@ export class BackendStack extends cdk.Stack {
       'mkdir -p /opt/f1cronos/cache',
       'chown -R nobody:nobody /opt/f1cronos/cache',
 
+      // Download Anthropic key from S3 and write a root-only env file
+      `aws s3 cp "${anthropicKeyAsset.s3ObjectUrl}" /tmp/anthropic.key`,
+      `printf 'ANTHROPIC_API_KEY=%s\\n' "$(tr -d '[:space:]' < /tmp/anthropic.key)" > /etc/f1cronos.env`,
+      'chmod 600 /etc/f1cronos.env',
+      'rm -f /tmp/anthropic.key',
+
       // ── systemd service ─────────────────────────────────────────────────
       'cat > /etc/systemd/system/f1cronos.service << \'EOF\'',
       '[Unit]',
@@ -76,6 +100,7 @@ export class BackendStack extends cdk.Stack {
       'Restart=always',
       'RestartSec=5',
       'Environment=HOME=/tmp',
+      'EnvironmentFile=/etc/f1cronos.env',
       '',
       '[Install]',
       'WantedBy=multi-user.target',

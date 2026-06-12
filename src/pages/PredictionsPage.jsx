@@ -30,7 +30,7 @@ const COUNTRY_CODE = {
   'Qatar': 'qa', 'Las Vegas': 'us', 'Miami': 'us',
 }
 
-function buildTableRows(predictedOrder, actualResults) {
+function buildTableRows(predictedOrder, actualResults, dnfDrivers) {
   const predMap = {}
   if (predictedOrder) {
     predictedOrder.forEach(p => { predMap[p.driver] = p })
@@ -55,6 +55,7 @@ function buildTableRows(predictedOrder, actualResults) {
       team: actual?.teamName || pred?.team || '',
       teamColor: actual?.teamColor || null,
       predictedPos: pred?.position ?? null,
+      isPredictedDnf: dnfDrivers ? dnfDrivers.has(abbr) : false,
       actualPos: rawActual,
       actualIsNumeric: isNumeric(rawActual),
     }
@@ -63,18 +64,21 @@ function buildTableRows(predictedOrder, actualResults) {
   const hasActual = actualResults && actualResults.length > 0
   rows.sort((a, b) => {
     if (hasActual) {
-      const aPos = parseInt(a.actualPos) || 99
-      const bPos = parseInt(b.actualPos) || 99
+      const aPos = parseInt(a.actualPos) || 999
+      const bPos = parseInt(b.actualPos) || 999
       return aPos - bPos
     }
-    return (a.predictedPos || 99) - (b.predictedPos || 99)
+    const aPos = a.isPredictedDnf ? 999 : (a.predictedPos || 998)
+    const bPos = b.isPredictedDnf ? 999 : (b.predictedPos || 998)
+    return aPos - bPos
   })
 
   return rows
 }
 
-function StandingsTable({ title, predictedOrder, actualResults, loadingActual }) {
-  const rows = buildTableRows(predictedOrder, actualResults)
+function StandingsTable({ title, predictedOrder, actualResults, loadingActual, dnfRisks }) {
+  const dnfDrivers = dnfRisks ? new Set(dnfRisks.map(d => d.driver)) : null
+  const rows = buildTableRows(predictedOrder, actualResults, dnfDrivers)
   if (rows.length === 0 && !loadingActual) return null
 
   return (
@@ -106,7 +110,10 @@ function StandingsTable({ title, predictedOrder, actualResults, loadingActual })
                 </td>
                 <td className="pred-td-team">{r.team}</td>
                 <td className="pred-td-pred">
-                  {r.predictedPos != null ? `P${r.predictedPos}` : '—'}
+                  {r.isPredictedDnf
+                    ? <span className="pred-dnf-tag">R</span>
+                    : r.predictedPos != null ? `P${r.predictedPos}` : '—'
+                  }
                 </td>
                 <td className="pred-td-actual">
                   {r.actualPos != null
@@ -161,7 +168,7 @@ export default function PredictionsPage() {
         <div className="pred-back-row">
           <Link to="/" className="pred-back-link">← Back</Link>
           {!loading && (
-            <button className="pred-refresh-btn" onClick={() => loadPredictions(true)}>
+            <button className="pred-refresh-btn" style={{ display: 'none' }} onClick={() => loadPredictions(true)}>
               ↻ Regenerate
             </button>
           )}
@@ -247,6 +254,7 @@ export default function PredictionsPage() {
               title="Race Standings"
               predictedOrder={data.predicted_race_order}
               actualResults={raceResults}
+              dnfRisks={data.dnf_risks}
             />
 
             <StandingsTable

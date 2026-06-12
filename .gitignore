@@ -60,6 +60,12 @@ Thumbs.db
 # Misc
 .npm
 
+# Anthropic API key — never commit
+.anthropic-key
+
+# CDK synthesis output — may contain asset files with secrets
+cdk/cdk.out/
+
 # Python virtual environment
 backend/venv/
 venv/

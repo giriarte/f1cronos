@@ -114,7 +114,7 @@ function NextEventWidget({ year }) {
             </div>
           </div>
           <Link to={`/predictions/${year}/${event.round}`} className="ne-predictions-btn">
-            Predictions
+            AI Predictions
           </Link>
         </div>
         <div className="ne-right">
