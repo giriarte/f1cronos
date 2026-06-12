@@ -525,33 +525,311 @@
   color: var(--red);
 }
 
-/* ── Standings section ── */
-
-.standings-section {
-  margin-top: 40px;
-}
-
-.standings-title {
-  font-size: 12px;
-  font-weight: 700;
-  letter-spacing: 0.07em;
-  text-transform: uppercase;
-  color: var(--text-muted);
-  margin: 0 0 12px;
-}
-
 .col-team-name {
   min-width: 140px;
   font-size: 12px;
   color: var(--text-secondary);
 }
 
-.standings-pts {
-  font-size: 13px !important;
-  font-weight: 700 !important;
-  color: var(--text-primary) !important;
+/* ── Practice Lap Comparison ── */
+
+.practice-lap-section {
+  margin-top: 32px;
 }
 
-.standings-loading {
-  margin-top: 40px;
+.plc-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 16px;
+  gap: 16px;
+}
+
+.plc-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.07em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 0;
+}
+
+.plc-controls {
+  position: relative;
+  flex-shrink: 0;
+}
+
+.plc-select-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--bg-card);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 7px 12px;
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s;
+  white-space: nowrap;
+}
+
+.plc-select-btn:hover,
+.plc-select-btn:focus {
+  border-color: var(--red);
+}
+
+.plc-chevron {
+  font-size: 9px;
+  color: var(--text-muted);
+}
+
+.plc-dropdown {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 220px;
+  max-height: 360px;
+  overflow-y: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.5);
+  z-index: 100;
+  padding: 4px 0;
+}
+
+.plc-dropdown-hint {
+  padding: 6px 14px;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+}
+
+.plc-dropdown-msg {
+  padding: 12px 14px;
+  font-size: 13px;
+  color: var(--text-muted);
+}
+
+.plc-dropdown-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background 0.1s;
+}
+
+.plc-dropdown-item:hover {
+  background: var(--bg-hover);
+}
+
+.plc-dropdown-item.checked {
+  background: rgba(225, 6, 0, 0.08);
+}
+
+.plc-dropdown-item.disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.plc-dropdown-item input[type="checkbox"] {
+  accent-color: var(--red);
+  cursor: pointer;
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.plc-dropdown-item.disabled input[type="checkbox"] {
+  cursor: not-allowed;
+}
+
+.plc-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.plc-abbr {
+  font-weight: 700;
+  color: var(--text-primary);
+  min-width: 32px;
+}
+
+.plc-dname {
+  color: var(--text-secondary);
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ── Lap Comparison Table ── */
+
+.plc-table-wrap {
+  overflow-x: auto;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+}
+
+.plc-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
+.plc-table thead th {
+  background: var(--bg-topbar);
+  border-bottom: 1px solid var(--border);
+}
+
+.plc-th-rank,
+.plc-td-rank {
+  width: 40px;
+  padding: 10px 12px;
+  text-align: center;
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text-muted);
+  border-right: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.plc-th-driver {
+  padding: 10px 20px;
+  text-align: center;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.05em;
+  color: var(--text-primary);
+  border-right: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.plc-th-driver:last-child {
+  border-right: none;
+}
+
+.plc-th-bar {
+  display: inline-block;
+  width: 3px;
+  height: 12px;
+  border-radius: 2px;
+  vertical-align: middle;
+  margin-right: 6px;
+}
+
+.plc-td-time {
+  padding: 9px 20px;
+  text-align: center;
+  border-right: 1px solid var(--border);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  vertical-align: middle;
+}
+
+.plc-td-time:last-child {
+  border-right: none;
+}
+
+.plc-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.plc-table tbody tr:hover td {
+  background: var(--bg-hover);
+}
+
+.plc-table .row-even td {
+  background: rgba(255, 255, 255, 0.015);
+}
+
+.plc-table .row-even td:hover,
+.plc-table .row-even tr:hover td {
+  background: var(--bg-hover);
+}
+
+.plc-time {
+  display: block;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+  color: var(--text-primary);
+}
+
+.plc-lapnum {
+  display: block;
+  font-size: 10px;
+  color: var(--text-muted);
+  margin-top: 2px;
+}
+
+.plc-muted {
+  color: var(--text-muted);
+  font-size: 12px;
+}
+
+/* ── Lap Progression Chart ── */
+
+.plc-chart-wrap {
+  margin-top: 24px;
+  background: var(--bg-card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 20px 8px 8px;
+}
+
+.plc-chart-tooltip {
+  background: var(--bg-topbar);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 10px 14px;
+  font-size: 12px;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.5);
+}
+
+.plc-tooltip-lap {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+  margin: 0 0 6px;
+}
+
+.plc-tooltip-row {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 2px 0;
+}
+
+.plc-tooltip-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.plc-tooltip-abbr {
+  font-weight: 700;
+  color: var(--text-primary);
+  min-width: 32px;
+}
+
+.plc-tooltip-time {
+  font-variant-numeric: tabular-nums;
+  font-family: 'JetBrains Mono', 'Fira Code', monospace;
+  color: var(--text-secondary);
 }

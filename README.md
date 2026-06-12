@@ -128,7 +128,7 @@ curl "http://localhost:8000/predictions/2026/10?force=true"
 | Variable | Required | Description |
 |---|---|---|
 | `VITE_API_URL` | Frontend | Backend base URL used by the React app. Set in `.env.local`. Defaults to `http://localhost:8000`. |
-| `ANTHROPIC_API_KEY` | Backend | Anthropic API key for AI predictions. Set in the shell (local) or via SSM Parameter Store (production). |
+| `ANTHROPIC_API_KEY` | Backend | Anthropic API key for AI predictions. Set in the shell (local) or via `/etc/f1cronos.env` on the EC2 instance (production). |
 
 ## Deploying to AWS
 
@@ -143,10 +143,16 @@ The backend runs on an EC2 instance (t3.micro, Amazon Linux 2023) behind a Cloud
 
 ### 1. Create the API key file
 
-The CDK stack reads your Anthropic key from a local file at the project root. This file is in `.gitignore` and is never committed.
+The CDK stack reads your Anthropic key from a local file at the project root. This file is in `.gitignore` and is never committed. It must be saved as plain ASCII — no BOM, no UTF-16.
+
+```powershell
+# PowerShell (Windows)
+[System.IO.File]::WriteAllText("$pwd\.anthropic-key", "sk-ant-...", [System.Text.Encoding]::ASCII)
+```
 
 ```bash
-echo "sk-ant-..." > .anthropic-key
+# bash / macOS / Linux
+printf 'sk-ant-...' > .anthropic-key
 ```
 
 `cdk synth` will fail with a clear error if this file is missing.
@@ -160,10 +166,9 @@ npx cdk deploy
 ```
 
 CDK will:
-- Upload the `backend/` source to S3
+- Upload the `backend/` source and the `.anthropic-key` file to the CDK bootstrap S3 bucket as assets
 - Provision an EC2 instance that installs dependencies and starts the FastAPI service via systemd
-- Store the Anthropic API key in SSM Parameter Store as a `SecureString`
-- Grant the EC2 role permission to read the key at boot time
+- At boot the instance downloads the key from S3 and writes it to `/etc/f1cronos.env` (chmod 600)
 - Create a CloudFront distribution for HTTPS termination
 
 The deploy output includes:
@@ -176,7 +181,30 @@ The deploy output includes:
 aws ssm start-session --target <InstanceId>
 ```
 
-### 4. Deploy the frontend (Amplify)
+### 4. Rotate or update the Anthropic API key
+
+**Without redeploying CDK** (takes effect immediately):
+
+```bash
+# 1. Connect to the instance
+aws ssm start-session --target <InstanceId> --region sa-east-1
+
+# 2. On the instance — overwrite the env file and restart the service
+echo "ANTHROPIC_API_KEY=sk-ant-..." | sudo tee /etc/f1cronos.env
+sudo chmod 600 /etc/f1cronos.env
+sudo systemctl restart f1cronos
+sudo systemctl status f1cronos
+```
+
+**For the next CDK deploy** — also update the local key file (must be plain ASCII):
+
+```powershell
+[System.IO.File]::WriteAllText("$pwd\.anthropic-key", "sk-ant-...", [System.Text.Encoding]::ASCII)
+```
+
+The key in `.anthropic-key` is uploaded as an S3 asset on each `cdk deploy` and pulled down by the instance only on first boot (i.e. when the EC2 instance is replaced). Updating the file alone does **not** rotate the key on a running instance — use the SSM step above for that.
+
+### 5. Deploy the frontend (Amplify)
 
 Connect the repository to AWS Amplify and set the environment variable:
 

@@ -100,7 +100,7 @@ export class BackendStack extends cdk.Stack {
       'Restart=always',
       'RestartSec=5',
       'Environment=HOME=/tmp',
-      'EnvironmentFile=/etc/f1cronos.env',
+      'EnvironmentFile=-/etc/f1cronos.env',
       '',
       '[Install]',
       'WantedBy=multi-user.target',

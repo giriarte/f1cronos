@@ -1,7 +1,38 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useRef, useMemo } from 'react'
 import { useParams, useLocation, useNavigate, Link } from 'react-router-dom'
-import { fetchSessions, fetchResults, fetchQualiSectors, fetchStandings } from '../api/f1Api'
+import {
+  LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer,
+} from 'recharts'
+import { fetchSessions, fetchResults, fetchQualiSectors, fetchLaps, fetchDrivers } from '../api/f1Api'
 import './RaceDetailPage.css'
+
+const FALLBACK_COLORS = [
+  '#e10600', '#0090ff', '#39b54a', '#ffd700', '#ff8700',
+  '#b440fb', '#00d2be', '#f596c8', '#006f62', '#52e252',
+]
+
+function fmtLapTime(secs) {
+  if (secs == null || isNaN(secs)) return '—'
+  const m = Math.floor(secs / 60)
+  const s = (secs % 60).toFixed(3).padStart(6, '0')
+  return `${m}:${s}`
+}
+
+function PracticeChartTooltip({ active, payload, label, colorMap }) {
+  if (!active || !payload?.length) return null
+  return (
+    <div className="plc-chart-tooltip">
+      <p className="plc-tooltip-lap">Lap {label}</p>
+      {payload.map(entry => (
+        <div key={entry.dataKey} className="plc-tooltip-row">
+          <span className="plc-tooltip-dot" style={{ background: entry.color }} />
+          <span className="plc-tooltip-abbr">{entry.dataKey}</span>
+          <span className="plc-tooltip-time">{fmtLapTime(entry.value)}</span>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 const SECTOR_COLORS = {
   purple: '#B440FB',
@@ -238,50 +269,239 @@ function ResultsTable({ results, session, sectors, year, round, race }) {
   )
 }
 
-function StandingsTable({ standings, year, round }) {
-  if (!standings.length) return null
+function PracticeLapComparison({ year, round, sessionName, race }) {
+  const [allDrivers, setAllDrivers] = useState([])
+  const [selectedDrivers, setSelectedDrivers] = useState([])
+  const [lapsData, setLapsData] = useState({})
+  const [loadingDrivers, setLoadingDrivers] = useState(true)
+  const [loadingLaps, setLoadingLaps] = useState({})
+  const [dropdownOpen, setDropdownOpen] = useState(false)
+  const dropdownRef = useRef(null)
+  const loadedSet = useRef(new Set())
+
+  useEffect(() => {
+    setAllDrivers([])
+    setSelectedDrivers([])
+    setLapsData({})
+    loadedSet.current = new Set()
+    setLoadingDrivers(true)
+    fetchDrivers(year, round, sessionName, race?.date)
+      .then(setAllDrivers)
+      .catch(() => setAllDrivers([]))
+      .finally(() => setLoadingDrivers(false))
+  }, [year, round, sessionName])
+
+  useEffect(() => {
+    function onMouseDown(e) {
+      if (dropdownRef.current && !dropdownRef.current.contains(e.target)) {
+        setDropdownOpen(false)
+      }
+    }
+    document.addEventListener('mousedown', onMouseDown)
+    return () => document.removeEventListener('mousedown', onMouseDown)
+  }, [])
+
+  async function loadDriverLaps(abbr) {
+    if (loadedSet.current.has(abbr)) return
+    loadedSet.current.add(abbr)
+    setLoadingLaps(prev => ({ ...prev, [abbr]: true }))
+    try {
+      const data = await fetchLaps(year, round, sessionName, abbr, race?.date)
+      setLapsData(prev => ({ ...prev, [abbr]: data }))
+    } catch {
+      setLapsData(prev => ({ ...prev, [abbr]: [] }))
+    }
+    setLoadingLaps(prev => ({ ...prev, [abbr]: false }))
+  }
+
+  function toggleDriver(abbr) {
+    if (selectedDrivers.includes(abbr)) {
+      setSelectedDrivers(prev => prev.filter(d => d !== abbr))
+    } else if (selectedDrivers.length < 10) {
+      setSelectedDrivers(prev => [...prev, abbr])
+      loadDriverLaps(abbr)
+    }
+  }
+
+  const colorMap = Object.fromEntries(
+    allDrivers.map((d, i) => [d.abbreviation, d.teamColor || FALLBACK_COLORS[i % FALLBACK_COLORS.length]])
+  )
+
+  const topLaps = {}
+  selectedDrivers.forEach(abbr => {
+    topLaps[abbr] = (lapsData[abbr] || [])
+      .filter(l => l.LapTime != null && !isNaN(l.LapTime))
+      .sort((a, b) => a.LapTime - b.LapTime)
+      .slice(0, 20)
+  })
+
+  const maxRows = selectedDrivers.length === 0
+    ? 0
+    : Math.max(...selectedDrivers.map(a => topLaps[a]?.length || 0))
+
+  const chartData = useMemo(() => {
+    const driverAvg = {}
+    selectedDrivers.forEach(abbr => {
+      const times = (lapsData[abbr] || []).map(l => l.LapTime).filter(t => t != null && !isNaN(t))
+      if (times.length > 0) driverAvg[abbr] = times.reduce((a, b) => a + b, 0) / times.length
+    })
+    const lapNums = new Set()
+    selectedDrivers.forEach(abbr => {
+      ;(lapsData[abbr] || []).forEach(l => { if (l.LapNumber != null) lapNums.add(l.LapNumber) })
+    })
+    return Array.from(lapNums).sort((a, b) => a - b).map(lapNum => {
+      const point = { lap: lapNum }
+      selectedDrivers.forEach(abbr => {
+        const lap = (lapsData[abbr] || []).find(l => l.LapNumber === lapNum)
+        if (lap && lap.LapTime != null && !isNaN(lap.LapTime)) {
+          const avg = driverAvg[abbr]
+          if (avg == null || lap.LapTime <= avg * 1.06) point[abbr] = lap.LapTime
+        }
+      })
+      return point
+    })
+  }, [selectedDrivers, lapsData])
+
+  const atMax = selectedDrivers.length >= 10
+  const btnLabel = selectedDrivers.length === 0
+    ? 'Select drivers'
+    : `${selectedDrivers.length} / 10 drivers`
+
   return (
-    <div className="standings-section">
-      <h2 className="standings-title">Driver Championship Standings</h2>
-      <div className="results-wrapper">
-        <table className="results-table">
-          <thead>
-            <tr>
-              <th className="col-pos">POS</th>
-              <th className="col-team-icon"></th>
-              <th className="col-driver">Driver</th>
-              <th className="col-team-name">Team</th>
-              <th className="col-pts standings-pts">PTS</th>
-              <th className="col-details"></th>
-            </tr>
-          </thead>
-          <tbody>
-            {standings.map((d, i) => (
-              <tr key={d.abbreviation} className={i % 2 === 0 ? 'row-even' : ''}>
-                <td className="col-pos">{d.position}</td>
-                <td className="col-team-icon">
-                  <span className="team-bar" style={{ background: d.teamColor }} />
-                </td>
-                <td className="col-driver">
-                  <span className="driver-abbr">{d.abbreviation}</span>
-                  <span className="driver-name">{d.fullName}</span>
-                </td>
-                <td className="col-team-name">{d.teamName}</td>
-                <td className="col-pts standings-pts">{d.points}</td>
-                <td className="col-details">
-                  <Link
-                    to={`/championship/${year}`}
-                    state={{ initialDriver: d.abbreviation, standings, round }}
-                    className="details-btn"
-                  >
-                    Stats
-                  </Link>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <div className="practice-lap-section">
+      <div className="plc-header">
+        <h2 className="plc-title">Lap Comparison</h2>
+        <div className="plc-controls" ref={dropdownRef}>
+          <button className="plc-select-btn" onClick={() => setDropdownOpen(o => !o)}>
+            {btnLabel}
+            <span className="plc-chevron">{dropdownOpen ? '▲' : '▼'}</span>
+          </button>
+          {dropdownOpen && (
+            <div className="plc-dropdown">
+              {atMax && <div className="plc-dropdown-hint">10 driver limit reached</div>}
+              {loadingDrivers ? (
+                <div className="plc-dropdown-msg">Loading drivers…</div>
+              ) : allDrivers.length === 0 ? (
+                <div className="plc-dropdown-msg">No drivers found</div>
+              ) : (
+                allDrivers.map(d => {
+                  const checked = selectedDrivers.includes(d.abbreviation)
+                  const disabled = atMax && !checked
+                  return (
+                    <label
+                      key={d.abbreviation}
+                      className={`plc-dropdown-item${checked ? ' checked' : ''}${disabled ? ' disabled' : ''}`}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={checked}
+                        disabled={disabled}
+                        onChange={() => toggleDriver(d.abbreviation)}
+                      />
+                      <span className="plc-dot" style={{ background: colorMap[d.abbreviation] }} />
+                      <span className="plc-abbr">{d.abbreviation}</span>
+                      <span className="plc-dname">{d.full_name}</span>
+                    </label>
+                  )
+                })
+              )}
+            </div>
+          )}
+        </div>
       </div>
+
+      {selectedDrivers.length === 0 ? (
+        <p className="status-message">Select drivers above to compare their top 20 fastest laps.</p>
+      ) : (
+        <>
+          <div className="plc-table-wrap">
+            <table className="plc-table">
+              <thead>
+                <tr>
+                  <th className="plc-th-rank">#</th>
+                  {selectedDrivers.map(abbr => (
+                    <th key={abbr} className="plc-th-driver">
+                      <span className="plc-th-bar" style={{ background: colorMap[abbr] }} />
+                      {abbr}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody>
+                {Array.from({ length: maxRows }, (_, i) => (
+                  <tr key={i} className={i % 2 === 0 ? 'row-even' : ''}>
+                    <td className="plc-td-rank">{i + 1}</td>
+                    {selectedDrivers.map(abbr => {
+                      if (loadingLaps[abbr]) {
+                        return <td key={abbr} className="plc-td-time"><span className="plc-muted">…</span></td>
+                      }
+                      const lap = topLaps[abbr]?.[i]
+                      return (
+                        <td key={abbr} className="plc-td-time">
+                          {lap ? (
+                            <>
+                              <span className="plc-time">{fmtLapTime(lap.LapTime)}</span>
+                              <span className="plc-lapnum">L{lap.LapNumber}</span>
+                            </>
+                          ) : (
+                            <span className="plc-muted">—</span>
+                          )}
+                        </td>
+                      )
+                    })}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {chartData.length > 0 && (
+            <div className="plc-chart-wrap">
+              <ResponsiveContainer width="100%" height={400}>
+                <LineChart data={chartData} margin={{ top: 8, right: 32, bottom: 28, left: 72 }}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="rgba(255,255,255,0.06)" />
+                  <XAxis
+                    dataKey="lap"
+                    tick={{ fill: 'var(--text-muted)', fontSize: 11 }}
+                    axisLine={{ stroke: 'var(--border)' }}
+                    tickLine={false}
+                    label={{ value: 'Lap', position: 'insideBottom', offset: -14, fill: 'var(--text-muted)', fontSize: 11 }}
+                  />
+                  <YAxis
+                    tickFormatter={fmtLapTime}
+                    tick={{ fill: 'var(--text-muted)', fontSize: 11 }}
+                    axisLine={{ stroke: 'var(--border)' }}
+                    tickLine={false}
+                    domain={['auto', 'auto']}
+                    width={72}
+                  />
+                  <Tooltip content={<PracticeChartTooltip colorMap={colorMap} />} />
+                  <Legend
+                    wrapperStyle={{ paddingTop: '12px' }}
+                    formatter={value => (
+                      <span style={{ color: colorMap[value] || 'var(--text-secondary)', fontSize: 12, fontWeight: 600 }}>
+                        {value}
+                      </span>
+                    )}
+                  />
+                  {selectedDrivers.map(abbr => (
+                    <Line
+                      key={abbr}
+                      type="monotone"
+                      dataKey={abbr}
+                      stroke={colorMap[abbr]}
+                      strokeWidth={2}
+                      dot={false}
+                      activeDot={{ r: 4, strokeWidth: 0 }}
+                      connectNulls={false}
+                    />
+                  ))}
+                </LineChart>
+              </ResponsiveContainer>
+            </div>
+          )}
+        </>
+      )}
     </div>
   )
 }
@@ -299,8 +519,6 @@ export default function RaceDetailPage() {
   const [loadingResults, setLoadingResults] = useState(false)
   const [error, setError] = useState(null)
   const [sectors, setSectors] = useState({})
-  const [standings, setStandings] = useState([])
-  const [loadingStandings, setLoadingStandings] = useState(false)
 
   useEffect(() => {
     if (race?.status === 'cancelled') {
@@ -332,21 +550,6 @@ export default function RaceDetailPage() {
       .catch((err) => { if (!cancelled) setError(err.message) })
       .finally(() => { if (!cancelled) setLoadingResults(false) })
 
-    return () => { cancelled = true }
-  }, [selectedSession, year, round])
-
-  useEffect(() => {
-    const type = sessionType(selectedSession)
-    if (type !== 'race' && type !== 'sprint') {
-      setStandings([])
-      return
-    }
-    let cancelled = false
-    setLoadingStandings(true)
-    fetchStandings(year, round, race?.date)
-      .then((data) => { if (!cancelled) setStandings(data) })
-      .catch(() => { if (!cancelled) setStandings([]) })
-      .finally(() => { if (!cancelled) setLoadingStandings(false) })
     return () => { cancelled = true }
   }, [selectedSession, year, round])
 
@@ -420,11 +623,10 @@ export default function RaceDetailPage() {
               <>
                 <ResultsTable results={results} session={selectedSession} sectors={sectors} year={year} round={round} race={race} />
                 <MobileResults results={results} session={selectedSession} sectors={sectors} year={year} round={round} race={race} />
+                {sessionType(selectedSession) === 'practice' && (
+                  <PracticeLapComparison year={year} round={round} sessionName={selectedSession} race={race} />
+                )}
               </>
-            )}
-            {loadingStandings && <p className="status-message standings-loading">Loading standings…</p>}
-            {!loadingStandings && standings.length > 0 && (
-              <StandingsTable standings={standings} year={year} round={round} />
             )}
           </>
         )}
