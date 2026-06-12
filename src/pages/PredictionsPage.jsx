@@ -1,6 +1,5 @@
 import { useState, useEffect } from 'react'
 import { useParams, Link } from 'react-router-dom'
-import Sidebar from '../components/Sidebar'
 import { fetchPredictions, fetchResults } from '../api/f1Api'
 import './PredictionsPage.css'
 
@@ -163,7 +162,6 @@ export default function PredictionsPage() {
 
   return (
     <div className="app-body">
-      <Sidebar activeSeason={Number(year)} onSeasonSelect={() => {}} />
       <main className="main-content">
         <div className="pred-back-row">
           <Link to="/" className="pred-back-link">← Back</Link>

@@ -77,6 +77,27 @@
   background: var(--bg-main);
 }
 
+.season-select {
+  margin-left: auto;
+  background: transparent;
+  color: var(--text-secondary);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 13px;
+  font-family: inherit;
+  font-weight: 600;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s, color 0.15s;
+}
+
+.season-select:hover,
+.season-select:focus {
+  border-color: rgba(255,255,255,0.2);
+  color: var(--text-primary);
+}
+
 .season-title {
   font-size: 20px;
   font-weight: 700;

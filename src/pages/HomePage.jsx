@@ -1,8 +1,7 @@
 import { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
-import Sidebar from '../components/Sidebar'
 import RaceCard from '../components/RaceCard'
-import { RACES_BY_SEASON, SEASONS } from '../data/seasons'
+import { RACES_BY_SEASON } from '../data/seasons'
 import { fetchSchedule, fetchStandings, fetchNextEvent } from '../api/f1Api'
 import { mapScheduleToRaces } from '../utils/scheduleMapper'
 import './HomePage.css'
@@ -179,8 +178,7 @@ function StandingsWidget({ standings, loading, expanded, onToggle, year }) {
   )
 }
 
-export default function HomePage() {
-  const [activeSeason, setActiveSeason] = useState(CURRENT_SEASON)
+export default function HomePage({ activeSeason }) {
   const [races, setRaces] = useState(RACES_BY_SEASON[CURRENT_SEASON])
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState(null)
@@ -222,11 +220,7 @@ export default function HomePage() {
 
   return (
     <div className="app-body">
-      <Sidebar activeSeason={activeSeason} onSeasonSelect={setActiveSeason} />
-
       <main className="main-content">
-        <h2 className="season-title">{activeSeason} Season</h2>
-
         <NextEventWidget year={activeSeason} />
 
         <StandingsWidget
