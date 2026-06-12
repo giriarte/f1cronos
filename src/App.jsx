@@ -5,6 +5,7 @@ import RaceDetailPage from './pages/RaceDetailPage'
 import LapTimesPage from './pages/LapTimesPage'
 import ChampionshipProgressionPage from './pages/ChampionshipProgressionPage'
 import LiveTimingPage from './pages/LiveTimingPage'
+import PredictionsPage from './pages/PredictionsPage'
 import './App.css'
 
 export default function App() {
@@ -27,6 +28,7 @@ export default function App() {
         <Route path="/race/:year/:round/laps" element={<LapTimesPage />} />
         <Route path="/championship/:year" element={<ChampionshipProgressionPage />} />
         <Route path="/live" element={<LiveTimingPage />} />
+        <Route path="/predictions/:year/:round" element={<PredictionsPage />} />
       </Routes>
     </div>
   )

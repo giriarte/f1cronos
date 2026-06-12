@@ -1,5 +1,10 @@
 import asyncio
 import json
+import os
+import pathlib
+from dotenv import load_dotenv
+
+load_dotenv(pathlib.Path(__file__).resolve().parent / ".env")
 import random
 import threading
 import time
@@ -865,6 +870,309 @@ async def get_next_event(year: int):
     try:
         result = await run_blocking(_compute)
         return {"next": result}
+    except Exception as e:
+        import traceback
+        raise HTTPException(status_code=500, detail=f"{e}\n{traceback.format_exc()}")
+
+
+# ---------------------------------------------------------------------------
+# AI Predictions
+# ---------------------------------------------------------------------------
+
+_PREDICTIONS_CACHE_DIR = pathlib.Path("cache/predictions")
+
+
+def _load_prediction_cache(year: int, round_number: int) -> dict | None:
+    path = _PREDICTIONS_CACHE_DIR / f"{year}_{round_number}.json"
+    if path.exists():
+        with open(path) as f:
+            return json.load(f)
+    return None
+
+
+def _save_prediction_cache(year: int, round_number: int, data: dict) -> None:
+    _PREDICTIONS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+    path = _PREDICTIONS_CACHE_DIR / f"{year}_{round_number}.json"
+    with open(path, "w") as f:
+        json.dump(data, f)
+
+
+def _gather_prediction_context(year: int, round_number: int) -> dict:
+    """Collect recent race results, per-driver form, circuit history, and standings."""
+    schedule = fastf1.get_event_schedule(year, include_testing=False)
+
+    row = schedule[schedule["RoundNumber"] == round_number]
+    if row.empty:
+        raise ValueError(f"Round {round_number} not found in {year} schedule")
+    event = row.iloc[0]
+    race_name = str(event.get("EventName", f"Round {round_number}"))
+    circuit   = str(event.get("Location", ""))
+    country   = str(event.get("Country", ""))
+
+    # Last 5 completed races — all finishers, not just top 10
+    past = schedule[schedule["RoundNumber"] < round_number].tail(5)
+    recent_results = []
+    for _, prev_event in past.iterrows():
+        rn = int(prev_event["RoundNumber"])
+        name = str(prev_event.get("EventName", f"Round {rn}")).replace(" Grand Prix", "").strip()
+        try:
+            s = fastf1.get_session(year, rn, "Race")
+            s.load(telemetry=False, weather=False, messages=False, laps=False)
+            if s.results is None or s.results.empty:
+                continue
+            drivers = []
+            for _, r in s.results.iterrows():
+                abbr = str(r.get("Abbreviation", ""))
+                if not abbr:
+                    continue
+                try:
+                    pos = int(str(r.get("ClassifiedPosition", "")).strip())
+                except (ValueError, TypeError):
+                    pos = None
+                status = str(r.get("Status", ""))
+                dnf = pos is None or (
+                    status not in ("Finished",)
+                    and not status.startswith("+")
+                    and not status.startswith("Lap")
+                )
+                drivers.append({
+                    "position": pos,
+                    "driver":   abbr,
+                    "team":     str(r.get("TeamName", "")),
+                    "dnf":      dnf,
+                })
+            drivers.sort(key=lambda x: (x["dnf"], x["position"] or 99))
+            recent_results.append({"race": name, "results": drivers})
+        except Exception:
+            continue
+
+    # Current standings (points from all Race + Sprint sessions before this round)
+    points_map: dict = {}
+    for _, prev_event in schedule[schedule["RoundNumber"] < round_number].iterrows():
+        rn = int(prev_event["RoundNumber"])
+        for i in range(1, 6):
+            sess_name = prev_event.get(f"Session{i}", "")
+            if not sess_name or str(sess_name).strip().lower() not in ("race", "sprint"):
+                continue
+            try:
+                s = fastf1.get_session(year, rn, str(sess_name))
+                s.load(telemetry=False, weather=False, messages=False, laps=False)
+                if s.results is None or s.results.empty:
+                    continue
+                for _, r in s.results.iterrows():
+                    abbr = str(r.get("Abbreviation", ""))
+                    if not abbr:
+                        continue
+                    pts = float(r["Points"]) if pd.notna(r.get("Points")) else 0
+                    if abbr not in points_map:
+                        points_map[abbr] = {"driver": abbr, "team": str(r.get("TeamName", "")), "points": 0}
+                    points_map[abbr]["points"] += pts
+            except Exception:
+                continue
+    standings = sorted(points_map.values(), key=lambda x: x["points"], reverse=True)[:10]
+
+    # Circuit history: same race in the previous 3 seasons
+    circuit_history = []
+    for hist_year in range(year - 3, year):
+        try:
+            hist_schedule = fastf1.get_event_schedule(hist_year, include_testing=False)
+            match = hist_schedule[hist_schedule["Location"].str.lower() == circuit.lower()]
+            if match.empty:
+                match = hist_schedule[hist_schedule["Country"].str.lower() == country.lower()]
+            if match.empty:
+                continue
+            hist_rn = int(match.iloc[0]["RoundNumber"])
+            s = fastf1.get_session(hist_year, hist_rn, "Race")
+            s.load(telemetry=False, weather=False, messages=False, laps=False)
+            if s.results is None or s.results.empty:
+                continue
+            top10 = []
+            for _, r in s.results.iterrows():
+                try:
+                    pos = int(str(r.get("ClassifiedPosition", "")).strip())
+                except (ValueError, TypeError):
+                    continue
+                if pos <= 10:
+                    top10.append({
+                        "position": pos,
+                        "driver":   str(r.get("Abbreviation", "")),
+                        "team":     str(r.get("TeamName", "")),
+                    })
+            top10.sort(key=lambda x: x["position"])
+            if top10:
+                circuit_history.append({"year": hist_year, "results": top10})
+        except Exception:
+            continue
+
+    return {
+        "race_name":       race_name,
+        "circuit":         circuit,
+        "country":         country,
+        "round":           round_number,
+        "year":            year,
+        "recent_results":  recent_results,
+        "standings":       standings,
+        "circuit_history": circuit_history,
+    }
+
+
+def _call_anthropic(context: dict) -> dict:
+    try:
+        import anthropic
+    except ImportError:
+        raise ValueError("anthropic package not installed — run: pip install anthropic")
+
+    api_key = os.environ.get("ANTHROPIC_API_KEY")
+    if not api_key:
+        raise ValueError("ANTHROPIC_API_KEY environment variable is not set")
+
+    standings_str = "\n".join(
+        f"  {i+1}. {d['driver']} ({d['team']}) – {d['points']} pts"
+        for i, d in enumerate(context["standings"])
+    )
+
+    # Per-driver form: collect positions across all recent races (oldest → newest)
+    driver_form: dict = {}  # abbr -> [label, ...]
+    driver_teams: dict = {}
+    for race in context["recent_results"]:
+        seen: set = set()
+        for r in race["results"]:
+            abbr = r["driver"]
+            if abbr in seen:
+                continue
+            seen.add(abbr)
+            driver_teams[abbr] = r["team"]
+            label = "DNF" if r["dnf"] else f"P{r['position']}"
+            driver_form.setdefault(abbr, []).append(label)
+    form_lines = [
+        f"  {abbr} ({driver_teams.get(abbr, '')}): {', '.join(positions)}"
+        for abbr, positions in sorted(driver_form.items())
+    ]
+    form_str = "\n".join(form_lines) if form_lines else "  No recent data available"
+
+    # Full race classifications
+    recent_lines = []
+    for r in context["recent_results"]:
+        finishers = ", ".join(
+            f"{x['position']}. {x['driver']}" for x in r["results"] if not x["dnf"]
+        )
+        dnfs = ", ".join(x["driver"] for x in r["results"] if x["dnf"])
+        line = f"  {r['race']}: {finishers}"
+        if dnfs:
+            line += f"  [DNF: {dnfs}]"
+        recent_lines.append(line)
+    recent_str = "\n".join(recent_lines) if recent_lines else "  No recent results available"
+
+    # Circuit history
+    hist_lines = []
+    for h in context.get("circuit_history", []):
+        top5 = ", ".join(
+            f"{x['position']}. {x['driver']} ({x['team']})" for x in h["results"][:5]
+        )
+        hist_lines.append(f"  {h['year']}: {top5}")
+    hist_str = "\n".join(hist_lines) if hist_lines else "  No historical data available for this circuit"
+
+    # All known drivers (union of standings + recent results)
+    all_drivers: dict = {}
+    for race in context["recent_results"]:
+        for r in race["results"]:
+            if r["driver"] and r["driver"] not in all_drivers:
+                all_drivers[r["driver"]] = r["team"]
+    for d in context["standings"]:
+        if d["driver"] not in all_drivers:
+            all_drivers[d["driver"]] = d["team"]
+    drivers_str = ", ".join(
+        f"{abbr} ({team})" for abbr, team in sorted(all_drivers.items())
+    ) or "Unknown — use your best knowledge of the current grid"
+
+    prompt = f"""You are an F1 race analyst. Predict the outcome of the upcoming {context['year']} {context['race_name']} at {context['circuit']}, {context['country']}.
+
+Current Championship Standings (Top 10):
+{standings_str}
+
+Driver Recent Form (last {len(context['recent_results'])} races, oldest → most recent):
+{form_str}
+
+Full Race Classifications (last {len(context['recent_results'])} races):
+{recent_str}
+
+Same Circuit — Race Results from Previous Seasons:
+{hist_str}
+
+Known Drivers on the Grid: {drivers_str}
+
+Respond with a JSON object only — no markdown fences, no text outside the JSON — using exactly this structure:
+{{
+  "podium": [
+    {{"position": 1, "driver": "<3-letter code>", "team": "<team>", "rationale": "<1-2 sentences>"}},
+    {{"position": 2, "driver": "<3-letter code>", "team": "<team>", "rationale": "<1-2 sentences>"}},
+    {{"position": 3, "driver": "<3-letter code>", "team": "<team>", "rationale": "<1-2 sentences>"}}
+  ],
+  "dnf_risks": [
+    {{"driver": "<3-letter code>", "team": "<team>", "reason": "<1 sentence>"}}
+  ],
+  "dark_horse": {{"driver": "<3-letter code>", "team": "<team>", "rationale": "<1-2 sentences>"}},
+  "summary": "<2-3 sentence race preview>",
+  "predicted_race_order": [
+    {{"position": 1, "driver": "<3-letter code>", "team": "<team>"}},
+    {{"position": 2, "driver": "<3-letter code>", "team": "<team>"}}
+  ],
+  "predicted_quali_order": [
+    {{"position": 1, "driver": "<3-letter code>", "team": "<team>"}},
+    {{"position": 2, "driver": "<3-letter code>", "team": "<team>"}}
+  ]
+}}
+Include all drivers in predicted_race_order and predicted_quali_order (up to 22 entries each), ordered 1st to last."""
+
+    client = anthropic.Anthropic(api_key=api_key)
+    message = client.messages.create(
+        model="claude-haiku-4-5-20251001",
+        max_tokens=2048,
+        messages=[{"role": "user", "content": prompt}],
+    )
+
+    raw = message.content[0].text.strip()
+    # Strip markdown code fences that Haiku sometimes adds despite instructions
+    if raw.startswith("```"):
+        raw = raw.split("\n", 1)[-1]
+        raw = raw.rsplit("```", 1)[0].strip()
+    return json.loads(raw)
+
+
+@app.get("/predictions/{year}/{round_number}")
+async def get_race_predictions(year: int, round_number: int, force: bool = False):
+    """
+    Return AI-generated predictions for the given race round.
+    The first call fetches data and queries Claude; subsequent calls return the
+    cached result from cache/predictions/{year}_{round_number}.json.
+    Pass ?force=true to bypass the cache and regenerate.
+    """
+    if not force:
+        cached = _load_prediction_cache(year, round_number)
+        if cached:
+            return cached
+
+    def _generate():
+        context    = _gather_prediction_context(year, round_number)
+        prediction = _call_anthropic(context)
+        result = {
+            "generated_at": pd.Timestamp.now().isoformat(),
+            "year":         year,
+            "round":        round_number,
+            "race_name":    context["race_name"],
+            "circuit":      context["circuit"],
+            "country":      context["country"],
+            **prediction,
+        }
+        _save_prediction_cache(year, round_number, result)
+        return result
+
+    try:
+        return await run_blocking(_generate)
+    except json.JSONDecodeError as e:
+        raise HTTPException(status_code=502, detail=f"Claude returned invalid JSON: {e}")
+    except ValueError as e:
+        raise HTTPException(status_code=503, detail=str(e))
     except Exception as e:
         import traceback
         raise HTTPException(status_code=500, detail=f"{e}\n{traceback.format_exc()}")

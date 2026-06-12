@@ -70,6 +70,13 @@ export async function fetchNextEvent(year) {
   return res.json()
 }
 
+export async function fetchPredictions(year, round, force = false) {
+  const url = `${BASE_URL}/predictions/${year}/${round}${force ? '?force=true' : ''}`
+  const res = await fetch(url)
+  if (!res.ok) throw await apiError(res, `Failed to fetch predictions (${res.status})`)
+  return res.json()
+}
+
 export async function fetchDrivers(year, round, sessionName, eventDate) {
   const encoded = encodeURIComponent(sessionName)
   const params = eventDate ? `?event_date=${encodeURIComponent(eventDate)}` : ''

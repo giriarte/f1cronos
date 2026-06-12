@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { useParams, useLocation, Link } from 'react-router-dom'
+import { useParams, useLocation, useNavigate, Link } from 'react-router-dom'
 import { fetchSessions, fetchResults, fetchQualiSectors, fetchStandings } from '../api/f1Api'
 import './RaceDetailPage.css'
 
@@ -289,6 +289,7 @@ function StandingsTable({ standings, year, round }) {
 export default function RaceDetailPage() {
   const { year, round } = useParams()
   const { state } = useLocation()
+  const navigate = useNavigate()
   const race = state?.race
 
   const [sessions, setSessions] = useState([])
@@ -384,7 +385,13 @@ export default function RaceDetailPage() {
             <select
               className="session-select"
               value={selectedSession ?? ''}
-              onChange={(e) => setSelectedSession(e.target.value)}
+              onChange={(e) => {
+                if (e.target.value === '__predictions__') {
+                  navigate(`/predictions/${year}/${round}`)
+                } else {
+                  setSelectedSession(e.target.value)
+                }
+              }}
             >
               {sessions.map((s) => {
                 const isUpcoming = s.date && new Date(s.date) >= new Date()
@@ -394,6 +401,9 @@ export default function RaceDetailPage() {
                   </option>
                 )
               })}
+              {Number(year) >= 2026 && (
+                <option value="__predictions__">AI Predictions</option>
+              )}
             </select>
           )}
         </div>

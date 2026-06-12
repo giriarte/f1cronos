@@ -14,7 +14,19 @@
       "WebFetch(domain:f1cosmos.com)",
       "Bash(dir c:\\\\Users\\\\tito_\\\\workplace\\\\f1cronos /b)",
       "Bash(npm install *)",
-      "Bash(npx tsc *)"
+      "Bash(npx tsc *)",
+      "WebSearch",
+      "Bash(curl -s --max-time 5 http://localhost:8000/schedule/2026)",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\(f'OK - {len\\(d\\)} rounds'\\)\")",
+      "Bash(curl -s --max-time 10 \"http://localhost:8000/predictions/2026/9?force=true\")",
+      "Bash(python -c \"import sys,json; d=json.load\\(sys.stdin\\); print\\('KEY OK' if 'race_name' in d else f'ERROR: {d.get\\(\\\\\"detail\\\\\",d\\)}'\\)\")",
+      "Bash(curl -s --max-time 5 http://localhost:8000/)",
+      "Bash(echo \"EXIT:$?\")",
+      "Bash(python -c \"import json; d=json.load\\(open\\('backend/cache/predictions/2026_9.json'\\)\\); print\\(d.get\\('generated_at'\\), '|', d.get\\('summary',''\\)[:80]\\)\")",
+      "Bash(rm backend/cache/predictions/2026_*.json && echo \"Deleted mock files\" && ls backend/cache/predictions/)"
+    ],
+    "additionalDirectories": [
+      "C:\\Users\\tito_\\workplace\\f1cronos\\backend\\cache\\predictions"
     ]
   }
 }

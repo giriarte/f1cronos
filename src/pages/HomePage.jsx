@@ -98,19 +98,24 @@ function NextEventWidget({ year }) {
     <div className="next-event-card">
       <div className="ne-label">Next Up</div>
       <div className="ne-main">
-        <div className="ne-race-info">
-          {code && (
-            <img
-              className="ne-flag"
-              src={`https://flagcdn.com/w40/${code}.png`}
-              srcSet={`https://flagcdn.com/w80/${code}.png 2x`}
-              alt={event.country}
-            />
-          )}
-          <div>
-            <div className="ne-name">{event.name} Grand Prix</div>
-            <div className="ne-location">{event.location}</div>
+        <div className="ne-left">
+          <div className="ne-race-info">
+            {code && (
+              <img
+                className="ne-flag"
+                src={`https://flagcdn.com/w40/${code}.png`}
+                srcSet={`https://flagcdn.com/w80/${code}.png 2x`}
+                alt={event.country}
+              />
+            )}
+            <div>
+              <div className="ne-name">{event.name} Grand Prix</div>
+              <div className="ne-location">{event.location}</div>
+            </div>
           </div>
+          <Link to={`/predictions/${year}/${event.round}`} className="ne-predictions-btn">
+            Predictions
+          </Link>
         </div>
         <div className="ne-right">
           <div className="ne-session-row">
