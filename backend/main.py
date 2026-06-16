@@ -2,6 +2,8 @@ import asyncio
 import json
 import os
 import pathlib
+import requests as _http
+from concurrent.futures import ThreadPoolExecutor as _TPE
 from dotenv import load_dotenv
 
 load_dotenv(pathlib.Path(__file__).resolve().parent / ".env")
@@ -1173,6 +1175,286 @@ async def get_race_predictions(year: int, round_number: int, force: bool = False
         raise HTTPException(status_code=502, detail=f"Claude returned invalid JSON: {e}")
     except ValueError as e:
         raise HTTPException(status_code=503, detail=str(e))
+    except Exception as e:
+        import traceback
+        raise HTTPException(status_code=500, detail=f"{e}\n{traceback.format_exc()}")
+
+
+# ---------------------------------------------------------------------------
+# Driver Profile  (Jolpica / Ergast API)
+# ---------------------------------------------------------------------------
+
+_JOLPICA = "https://api.jolpi.ca/ergast/f1"
+
+_DRIVER_ID_MAP = {
+    # 2026 active grid
+    "VER": "max_verstappen", "NOR": "norris",    "LEC": "leclerc",
+    "PIA": "piastri",        "RUS": "russell",   "ANT": "antonelli",
+    "HAM": "hamilton",       "SAI": "sainz",     "ALO": "alonso",
+    "STR": "stroll",         "GAS": "gasly",     "OCO": "ocon",
+    "HUL": "hulkenberg",     "HAD": "hadjar",    "LAW": "lawson",
+    "COL": "colapinto",      "ALB": "albon",     "BEA": "bearman",
+    "BOR": "bortoleto",      "LIN": "lindblad",
+    # Recent historical (2014–2025)
+    "BOT": "bottas",         "PER": "perez",     "VET": "vettel",
+    "RIC": "ricciardo",      "TSU": "tsunoda",   "MAG": "kevin_magnussen",
+    "MSC": "mick_schumacher","ZHO": "zhou",      "DEV": "de_vries",
+    "SAR": "sargeant",       "LAT": "latifi",    "MAZ": "mazepin",
+    "GIO": "giovinazzi",     "RAI": "raikkonen", "KUB": "kubica",
+    "GRO": "grosjean",       "KVY": "kvyat",     "ERI": "ericsson",
+    "HAR": "hartley",        "SIR": "sirotkin",  "BUT": "button",
+    "ROS": "rosberg",        "MAS": "massa",     "WEB": "webber",
+}
+
+_JUNIOR_CAREER = {
+    "VER": ["Karting (2005–2012)", "Formula Ford 1600 (2014)", "FIA European F3 (2014) – 3rd"],
+    "HAM": ["Karting (1993–2000)", "Formula Renault UK (2002) – Champion", "Formula Three Euro Series (2005) – Champion", "GP2 Series (2006) – Champion"],
+    "LEC": ["Karting (2009–2014)", "FIA European F3 (2015) – Champion", "GP3 Series (2016) – Champion", "FIA Formula 2 (2017) – Champion"],
+    "NOR": ["Karting (2010–2014)", "MSA Formula (2015) – Champion", "FIA European F3 (2017) – Champion", "FIA Formula 2 (2018) – 2nd"],
+    "RUS": ["Karting (2007–2014)", "FIA European F3 (2017) – Champion", "FIA Formula 2 (2018) – Champion"],
+    "SAI": ["Karting (2006–2012)", "Formula Renault 2.0 Alps (2012)", "Formula Renault 3.5 (2014) – Champion"],
+    "PIA": ["Karting (2012–2018)", "Toyota Racing Series (2019) – Champion", "FIA Formula 2 (2021) – Champion"],
+    "ALO": ["Karting (1991–1999)", "Formula Nissan (1999) – Champion", "Euro Open by Nissan (2000) – Champion"],
+    "ANT": ["Karting (2015–2022)", "Italian F4 (2022) – Champion", "Formula Regional European (2023) – Champion", "FIA Formula 2 (2024) – Champion"],
+    "STR": ["Karting (2011–2015)", "Italian F4 (2015) – Champion", "FIA European F3 (2016) – Champion"],
+    "GAS": ["Karting (2007–2012)", "Formula Renault 2.0 (2012) – 3rd", "Formula Renault 3.5 (2014) – Champion"],
+    "OCO": ["Karting (2008–2013)", "German F4 (2014) – Champion", "GP3 Series (2015) – Champion", "FIA Formula 2 (2016) – 2nd"],
+    "HUL": ["Formula BMW (2003) – European Champion", "Formula Three (2004–2005)", "Formula Renault 3.5 (2005) – 4th"],
+    "HAD": ["Karting (2016–2022)", "ADAC F4 (2022) – Champion", "FIA Formula 3 (2023) – 3rd", "FIA Formula 2 (2024) – Champion"],
+    "LAW": ["Karting (2010–2017)", "Toyota Racing Series (2018)", "FIA Formula 3 (2019) – 5th", "FIA Formula 2 (2021) – Champion"],
+    "ALB": ["Karting (2010–2014)", "GP3 Series (2016) – Champion", "FIA Formula 2 (2018) – 5th"],
+    "BEA": ["Karting (2015–2019)", "Italian F4 (2020) – Champion", "FIA Formula 3 (2022) – 3rd", "FIA Formula 2 (2023) – 2nd"],
+    "BOR": ["Karting (2013–2019)", "FIA Formula 2 (2022) – 3rd", "FIA Formula 2 (2023) – Champion"],
+    "COL": ["Karting (2013–2017)", "FIA Formula 2 (2021) – 6th", "FIA Formula 2 (2022) – 3rd"],
+    "LIN": ["Karting (2016–2022)", "FIA Formula 4 (2022) – Nordic Champion", "Formula Regional European (2023) – 3rd", "FIA Formula 3 (2024) – 3rd"],
+}
+
+
+@app.get("/driver/{code}")
+async def get_driver_profile(code: str):
+    """Return a complete driver profile: bio, F1 season record, and H2H vs teammates."""
+    code = code.upper()
+
+    cache_path = pathlib.Path(f"cache/driver/{code}.json")
+    if cache_path.exists():
+        age_h = (time.time() - cache_path.stat().st_mtime) / 3600
+        if age_h < 24:
+            with open(cache_path) as f:
+                return json.load(f)
+
+    driver_id = _DRIVER_ID_MAP.get(code)
+    if not driver_id:
+        raise HTTPException(status_code=404, detail=f"Unknown driver code: {code}")
+
+    def _jget(path: str) -> dict:
+        r = _http.get(f"{_JOLPICA}{path}", timeout=15)
+        r.raise_for_status()
+        return r.json()["MRData"]
+
+    def _build() -> dict:
+        # 1. Biographical info
+        try:
+            drivers_list = _jget(f"/drivers/{driver_id}.json")["DriverTable"]["Drivers"]
+            info = drivers_list[0] if drivers_list else {}
+        except Exception:
+            info = {}
+
+        # 2. Season-by-season standings
+        try:
+            standings_list = _jget(f"/drivers/{driver_id}/driverStandings.json?limit=100")["StandingsTable"]["StandingsLists"]
+        except Exception:
+            standings_list = []
+
+        # 3. All race results
+        try:
+            race_list = _jget(f"/drivers/{driver_id}/results.json?limit=1000")["RaceTable"]["Races"]
+        except Exception:
+            race_list = []
+
+        # 4. All qualifying results
+        try:
+            quali_list = _jget(f"/drivers/{driver_id}/qualifying.json?limit=1000")["RaceTable"]["Races"]
+        except Exception:
+            quali_list = []
+
+        # --- Season record ---
+        races_by_year: dict = {}
+        for race in race_list:
+            races_by_year.setdefault(race["season"], []).append(race)
+
+        seasons = []
+        for sl in standings_list:
+            yr = sl["season"]
+            ds = sl["DriverStandings"][0]
+            yr_races = races_by_year.get(yr, [])
+            poles = sum(
+                1 for r in yr_races
+                for res in r.get("Results", [])
+                if res.get("grid") == "1"
+            )
+            podiums = sum(
+                1 for r in yr_races
+                for res in r.get("Results", [])
+                if res.get("positionText", "").isdigit() and int(res["positionText"]) <= 3
+            )
+            teams_seen = list(dict.fromkeys(
+                res["Constructor"]["name"]
+                for r in yr_races for res in r.get("Results", [])
+            ))
+            team_str = " / ".join(teams_seen) if teams_seen else (
+                ds["Constructors"][-1]["name"] if ds.get("Constructors") else ""
+            )
+            seasons.append({
+                "year": int(yr), "team": team_str,
+                "races": len(yr_races), "wins": int(ds["wins"]),
+                "poles": poles, "podiums": podiums,
+                "points": float(ds["points"]), "position": int(ds["position"]),
+            })
+        seasons.sort(key=lambda x: x["year"])
+
+        # --- H2H ---
+        # Unique (year, constructor) pairs from race results
+        year_constructors: dict = {}
+        for race in race_list:
+            yr = race["season"]
+            for res in race.get("Results", []):
+                year_constructors.setdefault(yr, set()).add(res["Constructor"]["constructorId"])
+
+        # Season-level standings for all drivers (one call per year, concurrent)
+        def _fetch_season_standings(yr):
+            try:
+                data = _jget(f"/{yr}/driverStandings.json")["StandingsTable"]["StandingsLists"]
+                if data:
+                    return yr, {e["Driver"].get("code", ""): float(e["points"]) for e in data[0]["DriverStandings"]}
+            except Exception:
+                pass
+            return yr, {}
+
+        all_yr_standings: dict = {}
+        unique_years = list(year_constructors.keys())
+        with _TPE(max_workers=6) as ex:
+            for yr, pts_map in ex.map(_fetch_season_standings, unique_years):
+                all_yr_standings[yr] = pts_map
+
+        # Per-(year, constructor) H2H
+        def _h2h_for_pair(pair):
+            yr, con_id = pair
+            try:
+                c_races = _jget(f"/{yr}/constructors/{con_id}/results.json?limit=100")["RaceTable"]["Races"]
+                c_quali = _jget(f"/{yr}/constructors/{con_id}/qualifying.json?limit=100")["RaceTable"]["Races"]
+            except Exception:
+                return None
+            if not c_races:
+                return None
+
+            # Primary teammate = most races driven alongside this driver
+            tm_count: dict = {}
+            for race in c_races:
+                for res in race.get("Results", []):
+                    dc = res["Driver"].get("code", "")
+                    if dc and dc != code:
+                        tm_count[dc] = tm_count.get(dc, 0) + 1
+            if not tm_count:
+                return None
+            tm_code = max(tm_count, key=tm_count.get)
+
+            tm_name = ""
+            for race in c_races:
+                for res in race.get("Results", []):
+                    if res["Driver"].get("code") == tm_code:
+                        d = res["Driver"]
+                        tm_name = f"{d.get('givenName','')} {d.get('familyName','')}".strip()
+                        break
+                if tm_name:
+                    break
+
+            # Race H2H
+            r_wins = r_losses = r_dnc = 0
+            for race in c_races:
+                my_r = tm_r = None
+                for res in race.get("Results", []):
+                    dc = res["Driver"].get("code", "")
+                    if dc == code:
+                        my_r = res
+                    elif dc == tm_code:
+                        tm_r = res
+                if not my_r or not tm_r:
+                    continue
+                my_pt, tm_pt = my_r.get("positionText", ""), tm_r.get("positionText", "")
+                my_cls, tm_cls = my_pt.isdigit(), tm_pt.isdigit()
+                if my_cls and tm_cls:
+                    if int(my_pt) < int(tm_pt):
+                        r_wins += 1
+                    else:
+                        r_losses += 1
+                elif my_cls:
+                    r_wins += 1
+                elif tm_cls:
+                    r_losses += 1
+                else:
+                    r_dnc += 1
+
+            if r_wins + r_losses + r_dnc == 0:
+                return None
+
+            # Qualifying H2H
+            q_wins = q_losses = q_dnc = 0
+            for race in c_quali:
+                my_q = tm_q = None
+                for res in race.get("QualifyingResults", []):
+                    dc = res["Driver"].get("code", "")
+                    if dc == code:
+                        my_q = res
+                    elif dc == tm_code:
+                        tm_q = res
+                if not my_q or not tm_q:
+                    continue
+                try:
+                    if int(my_q["position"]) < int(tm_q["position"]):
+                        q_wins += 1
+                    else:
+                        q_losses += 1
+                except (ValueError, KeyError):
+                    q_dnc += 1
+
+            yr_pts = all_yr_standings.get(yr, {})
+            return {
+                "year": int(yr), "constructor": con_id,
+                "teammate": tm_code, "teammate_name": tm_name,
+                "race_wins": r_wins, "race_losses": r_losses, "race_dnc": r_dnc,
+                "quali_wins": q_wins, "quali_losses": q_losses, "quali_dnc": q_dnc,
+                "points": float(yr_pts.get(code, 0)),
+                "teammate_points": float(yr_pts.get(tm_code, 0)),
+            }
+
+        pairs = [(yr, con) for yr, cons in year_constructors.items() for con in cons]
+        h2h = []
+        with _TPE(max_workers=6) as ex:
+            for result in ex.map(_h2h_for_pair, pairs):
+                if result is not None:
+                    h2h.append(result)
+        h2h.sort(key=lambda x: x["year"])
+
+        full_name = f"{info.get('givenName','')} {info.get('familyName','')}".strip() or code
+        profile = {
+            "code": code,
+            "full_name": full_name,
+            "nationality": info.get("nationality", ""),
+            "date_of_birth": info.get("dateOfBirth", ""),
+            "number": info.get("permanentNumber", ""),
+            "url": info.get("url", ""),
+            "junior_career": _JUNIOR_CAREER.get(code, []),
+            "seasons": seasons,
+            "h2h": h2h,
+        }
+
+        cache_path.parent.mkdir(parents=True, exist_ok=True)
+        with open(cache_path, "w") as f:
+            json.dump(profile, f, indent=2)
+        return profile
+
+    try:
+        return await run_blocking(_build)
     except Exception as e:
         import traceback
         raise HTTPException(status_code=500, detail=f"{e}\n{traceback.format_exc()}")

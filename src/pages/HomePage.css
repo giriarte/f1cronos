@@ -245,6 +245,13 @@
   white-space: nowrap;
 }
 
+.hs-name-link {
+  text-decoration: none;
+  color: inherit;
+  transition: color 0.15s;
+}
+.hs-name-link:hover { color: var(--text-primary); text-decoration: underline; text-underline-offset: 2px; }
+
 .hs-pts {
   font-size: 13px;
   font-weight: 600;

@@ -152,7 +152,14 @@ function StandingsWidget({ standings, loading, expanded, onToggle, year }) {
                 <span className="hs-pos">{d.position}</span>
                 <span className="hs-bar" style={{ background: d.teamColor }} />
                 <span className="hs-abbr">{d.abbreviation}</span>
-                <span className="hs-name">{d.fullName}</span>
+                <a
+                  href={`/driver/${d.abbreviation}`}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="hs-name hs-name-link"
+                >
+                  {d.fullName}
+                </a>
                 <span className="hs-pts">{d.points} pts</span>
                 <a
                   href={`/championship/${year}?driver=${d.abbreviation}`}

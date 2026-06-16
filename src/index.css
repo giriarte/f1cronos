@@ -1,14 +1,14 @@
 :root {
-  --red: #e10600;
-  --bg-main: #0f0f0f;
-  --bg-topbar: #161616;
-  --bg-sidebar: #141414;
-  --bg-card: #1a1a1a;
-  --bg-hover: rgba(255,255,255,0.06);
-  --border: rgba(255,255,255,0.08);
-  --text-primary: #f0f0f0;
-  --text-secondary: #a0a0a0;
-  --text-muted: #606060;
+  --red: #f59e0b;
+  --bg-main: #0f0e09;
+  --bg-topbar: #18160c;
+  --bg-sidebar: #141209;
+  --bg-card: #221f10;
+  --bg-hover: rgba(245,158,11,0.07);
+  --border: rgba(245,158,11,0.13);
+  --text-primary: #fff8e8;
+  --text-secondary: #b09060;
+  --text-muted: #706040;
 }
 
 *, *::before, *::after {

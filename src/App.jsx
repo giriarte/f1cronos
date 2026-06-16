@@ -7,6 +7,7 @@ import LapTimesPage from './pages/LapTimesPage'
 import ChampionshipProgressionPage from './pages/ChampionshipProgressionPage'
 import LiveTimingPage from './pages/LiveTimingPage'
 import PredictionsPage from './pages/PredictionsPage'
+import DriverProfilePage from './pages/DriverProfilePage'
 import './App.css'
 
 const CURRENT_SEASON = 2026
@@ -46,6 +47,7 @@ export default function App() {
         <Route path="/championship/:year" element={<ChampionshipProgressionPage />} />
         <Route path="/live" element={<LiveTimingPage />} />
         <Route path="/predictions/:year/:round" element={<PredictionsPage />} />
+        <Route path="/driver/:code" element={<DriverProfilePage />} />
       </Routes>
     </div>
   )

@@ -84,3 +84,9 @@ export async function fetchDrivers(year, round, sessionName, eventDate) {
   if (!res.ok) throw new Error(`Failed to fetch drivers (${res.status})`)
   return res.json()
 }
+
+export async function fetchDriverProfile(code) {
+  const res = await fetch(`${BASE_URL}/driver/${code}`)
+  if (!res.ok) throw await apiError(res, `Driver profile not available (${res.status})`)
+  return res.json()
+}
