@@ -79,7 +79,7 @@ export default function DriverProfilePage() {
 
   if (!profile) return null
 
-  const { full_name, nationality, date_of_birth, number, url,
+  const { full_name, nationality, date_of_birth, number, url, photo_url,
           junior_career, seasons, h2h } = profile
 
   const flagCode = NATIONALITY_FLAG[nationality]
@@ -104,6 +104,9 @@ export default function DriverProfilePage() {
 
         {/* ── Header ──────────────────────────────────────────── */}
         <div className="dp-header">
+          {photo_url && (
+            <img className="dp-photo" src={photo_url} alt={full_name} />
+          )}
           <div className="dp-number">#{number || '—'}</div>
           <div className="dp-header-info">
             <h1 className="dp-name">{full_name}</h1>

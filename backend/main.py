@@ -71,9 +71,9 @@ def _resolve_round(schedule: pd.DataFrame, round_number: int, event_date: Option
     return round_number
 
 
-def load_session(year: int, round_number: int, session_type: str) -> fastf1.core.Session:
+def load_session(year: int, round_number: int, session_type: str, telemetry: bool = True) -> fastf1.core.Session:
     session = fastf1.get_session(year, round_number, session_type)
-    session.load(telemetry=True, weather=False, messages=False)
+    session.load(telemetry=telemetry, laps=True, weather=False, messages=False)
     return session
 
 
@@ -104,6 +104,11 @@ async def get_schedule(year: int):
 # Historical – Laps
 # ---------------------------------------------------------------------------
 
+_LAPS_CACHE_DIR = pathlib.Path("cache/laps")
+_LAPS_CACHE_DIR.mkdir(parents=True, exist_ok=True)
+_LAPS_CACHE_TTL = 24 * 3600  # seconds
+
+
 @app.get("/laps/{year}/{round_number}/{session_type}/{driver}")
 async def get_driver_laps(year: int, round_number: int, session_type: str, driver: str, event_date: Optional[str] = None):
     """
@@ -111,10 +116,16 @@ async def get_driver_laps(year: int, round_number: int, session_type: str, drive
     session_type: 'Q' for qualifying, 'R' for race, 'FP1' / 'FP2' / 'FP3'
     driver: three-letter code e.g. 'VER', 'HAM'
     """
+    cache_key = f"{year}_{round_number}_{session_type}_{driver.upper()}"
+    cache_file = _LAPS_CACHE_DIR / f"{cache_key}.json"
+
+    if cache_file.exists() and (time.time() - cache_file.stat().st_mtime) < _LAPS_CACHE_TTL:
+        return json.loads(cache_file.read_text())
+
     def _load():
         schedule = fastf1.get_event_schedule(year, include_testing=False)
         real_round = _resolve_round(schedule, round_number, event_date)
-        return load_session(year, real_round, session_type)
+        return load_session(year, real_round, session_type, telemetry=False)
 
     try:
         session = await run_blocking(_load)
@@ -144,14 +155,16 @@ async def get_driver_laps(year: int, round_number: int, session_type: str, drive
                 except Exception:
                     result[col] = None
 
-        # float('nan') is not valid JSON — convert to None at Python dict level
         import math
         records = result.to_dict(orient="records")
         def _clean(v):
             if isinstance(v, float) and math.isnan(v):
                 return None
             return v
-        return [{k: _clean(v) for k, v in row.items()} for row in records]
+        cleaned = [{k: _clean(v) for k, v in row.items()} for row in records]
+
+        cache_file.write_text(json.dumps(cleaned))
+        return cleaned
 
     except HTTPException:
         raise
@@ -1251,6 +1264,19 @@ async def get_driver_profile(code: str):
         r.raise_for_status()
         return r.json()["MRData"]
 
+    def _jget_all(path: str, table: str, key: str) -> list:
+        """Paginate through a Jolpica endpoint, collecting all items."""
+        items, offset, limit = [], 0, 100
+        sep = "&" if "?" in path else "?"
+        while True:
+            data = _jget(f"{path}{sep}limit={limit}&offset={offset}")
+            page = data[table][key]
+            items.extend(page)
+            offset += len(page)
+            if offset >= int(data.get("total", 0)) or not page:
+                break
+        return items
+
     def _build() -> dict:
         # 1. Biographical info
         try:
@@ -1259,34 +1285,46 @@ async def get_driver_profile(code: str):
         except Exception:
             info = {}
 
-        # 2. Season-by-season standings
+        # 2. All race results (paginated — Jolpica caps at 100 per page)
         try:
-            standings_list = _jget(f"/drivers/{driver_id}/driverStandings.json?limit=100")["StandingsTable"]["StandingsLists"]
-        except Exception:
-            standings_list = []
-
-        # 3. All race results
-        try:
-            race_list = _jget(f"/drivers/{driver_id}/results.json?limit=1000")["RaceTable"]["Races"]
+            race_list = _jget_all(f"/drivers/{driver_id}/results.json", "RaceTable", "Races")
         except Exception:
             race_list = []
-
-        # 4. All qualifying results
-        try:
-            quali_list = _jget(f"/drivers/{driver_id}/qualifying.json?limit=1000")["RaceTable"]["Races"]
-        except Exception:
-            quali_list = []
 
         # --- Season record ---
         races_by_year: dict = {}
         for race in race_list:
             races_by_year.setdefault(race["season"], []).append(race)
 
+        # 4. Season standings — cross-season endpoint broken on Jolpica;
+        #    fetch per-year concurrently from the years found in race results.
+        years_from_races = sorted(set(r["season"] for r in race_list))
+
+        def _fetch_year_standing(yr: str):
+            try:
+                data = _jget(f"/{yr}/drivers/{driver_id}/driverStandings.json")
+                lists = data["StandingsTable"]["StandingsLists"]
+                if lists:
+                    return yr, lists[0]["DriverStandings"][0]
+            except Exception:
+                pass
+            return yr, None
+
+        yr_standings: dict = {}
+        with _TPE(max_workers=6) as ex:
+            for yr, ds in ex.map(_fetch_year_standing, years_from_races):
+                if ds is not None:
+                    yr_standings[yr] = ds
+
         seasons = []
-        for sl in standings_list:
-            yr = sl["season"]
-            ds = sl["DriverStandings"][0]
+        for yr in years_from_races:
             yr_races = races_by_year.get(yr, [])
+            ds = yr_standings.get(yr)
+            wins = sum(
+                1 for r in yr_races
+                for res in r.get("Results", [])
+                if res.get("positionText") == "1"
+            )
             poles = sum(
                 1 for r in yr_races
                 for res in r.get("Results", [])
@@ -1302,13 +1340,14 @@ async def get_driver_profile(code: str):
                 for r in yr_races for res in r.get("Results", [])
             ))
             team_str = " / ".join(teams_seen) if teams_seen else (
-                ds["Constructors"][-1]["name"] if ds.get("Constructors") else ""
+                ds["Constructors"][-1]["name"] if ds and ds.get("Constructors") else ""
             )
             seasons.append({
                 "year": int(yr), "team": team_str,
-                "races": len(yr_races), "wins": int(ds["wins"]),
+                "races": len(yr_races), "wins": wins,
                 "poles": poles, "podiums": podiums,
-                "points": float(ds["points"]), "position": int(ds["position"]),
+                "points": float(ds["points"]) if ds else 0.0,
+                "position": int(ds["position"]) if ds else 99,
             })
         seasons.sort(key=lambda x: x["year"])
 
@@ -1436,13 +1475,30 @@ async def get_driver_profile(code: str):
         h2h.sort(key=lambda x: x["year"])
 
         full_name = f"{info.get('givenName','')} {info.get('familyName','')}".strip() or code
+
+        photo_url = ""
+        wiki_url = info.get("url", "")
+        if wiki_url and "/wiki/" in wiki_url:
+            try:
+                title = wiki_url.split("/wiki/", 1)[1]
+                r = _http.get(
+                    f"https://en.wikipedia.org/api/rest_v1/page/summary/{title}",
+                    timeout=10,
+                    headers={"User-Agent": "F1Cronos/1.0"},
+                )
+                if r.ok:
+                    photo_url = r.json().get("thumbnail", {}).get("source", "")
+            except Exception:
+                pass
+
         profile = {
             "code": code,
             "full_name": full_name,
             "nationality": info.get("nationality", ""),
             "date_of_birth": info.get("dateOfBirth", ""),
             "number": info.get("permanentNumber", ""),
-            "url": info.get("url", ""),
+            "url": wiki_url,
+            "photo_url": photo_url,
             "junior_career": _JUNIOR_CAREER.get(code, []),
             "seasons": seasons,
             "h2h": h2h,

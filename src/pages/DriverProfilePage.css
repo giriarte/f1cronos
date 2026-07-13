@@ -54,6 +54,17 @@
   border-radius: 10px;
 }
 
+.dp-photo {
+  width: 96px;
+  height: 96px;
+  border-radius: 50%;
+  object-fit: cover;
+  object-position: center top;
+  border: 2px solid var(--border);
+  flex-shrink: 0;
+  background: var(--bg-main);
+}
+
 .dp-number {
   font-size: 40px;
   font-weight: 800;

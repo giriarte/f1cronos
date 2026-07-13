@@ -23,7 +23,11 @@
       "Bash(curl -s --max-time 5 http://localhost:8000/)",
       "Bash(echo \"EXIT:$?\")",
       "Bash(python -c \"import json; d=json.load\\(open\\('backend/cache/predictions/2026_9.json'\\)\\); print\\(d.get\\('generated_at'\\), '|', d.get\\('summary',''\\)[:80]\\)\")",
-      "Bash(rm backend/cache/predictions/2026_*.json && echo \"Deleted mock files\" && ls backend/cache/predictions/)"
+      "Bash(rm backend/cache/predictions/2026_*.json && echo \"Deleted mock files\" && ls backend/cache/predictions/)",
+      "PowerShell(Invoke-RestMethod \"https://api.jolpi.ca/ergast/f1/drivers/alonso/driverStandings.json?limit=100\")",
+      "PowerShell(Invoke-RestMethod \"https://api.jolpi.ca/ergast/f1/2005/drivers/alonso/driverStandings.json\")",
+      "PowerShell(Invoke-RestMethod \"https://api.jolpi.ca/ergast/f1/drivers/alonso/results.json?limit=10\")",
+      "PowerShell(Invoke-RestMethod \"https://api.jolpi.ca/ergast/f1/drivers/alonso/results.json?limit=1000\")"
     ],
     "additionalDirectories": [
       "C:\\Users\\tito_\\workplace\\f1cronos\\backend\\cache\\predictions"
